@@ -1,10 +1,15 @@
 .PHONY: build gui gui-package test
 
+# Version stamped into binaries: the exact tag on a release commit, else
+# "<tag>-<n>-g<sha>[-dirty]", else the short sha. `hopd version` prints this.
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+LDFLAGS := -s -w -X github.com/GavinYangAI/hopd/internal/version.Version=$(VERSION)
+
 build:
-	go build -o hopd ./cmd/hopd
+	go build -ldflags "$(LDFLAGS)" -o hopd ./cmd/hopd
 
 gui:
-	go build -o hopd-gui ./cmd/hopd-gui
+	go build -ldflags "$(LDFLAGS)" -o hopd-gui ./cmd/hopd-gui
 
 # Package the menu-bar app as hopd-gui.app (requires `go install fyne.io/fyne/v2/cmd/fyne@v2.7.4`).
 # Builds the bundle with the repo-root Icon.png, then sets LSUIElement so the

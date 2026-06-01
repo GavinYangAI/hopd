@@ -1,0 +1,60 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write # create the release and upload assets
+
+jobs:
+  # Build the CLI for darwin/linux × amd64/arm64 and cut the GitHub release.
+  cli:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # GoReleaser needs full history + tags
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Package the macOS menu-bar app and attach it to the same release.
+  macos-app:
+    needs: cli
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install Fyne packaging tool
+        run: go install fyne.io/fyne/v2/cmd/fyne@v2.7.4
+
+      - name: Stamp bundle version from the tag
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          sed -i '' "s/^Version = .*/Version = \"$V\"/" FyneApp.toml
+
+      - name: Package hopd-gui.app
+        run: |
+          export PATH="$PATH:$(go env GOPATH)/bin"
+          make gui-package
+          ditto -c -k --sequesterRsrc --keepParent hopd-gui.app "hopd-gui_${GITHUB_REF_NAME}_macos.zip"
+
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$GITHUB_REF_NAME" "hopd-gui_${GITHUB_REF_NAME}_macos.zip" --clobber

@@ -1,0 +1,50 @@
+# GoReleaser config for the hopd CLI. Run automatically on tag push by
+# .github/workflows/release.yml. The menu-bar GUI (hopd-gui.app) needs CGO +
+# Fyne and is packaged separately in that workflow's macOS job.
+version: 2
+
+project_name: hopd
+
+builds:
+  - id: hopd
+    main: ./cmd/hopd
+    binary: hopd
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X github.com/GavinYangAI/hopd/internal/version.Version={{ .Version }}
+
+archives:
+  - id: hopd
+    ids:
+      - hopd
+    name_template: "hopd_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - README.zh-CN.md
+      - LICENSE
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^chore:"
+      - "^test:"
+
+release:
+  github:
+    owner: GavinYangAI
+    name: hopd
+  draft: false
+  prerelease: auto
