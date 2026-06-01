@@ -1,5 +1,7 @@
 # hopd
 
+**English** · [中文](README.zh-CN.md)
+
 A resident SSH port-forwarding daemon. Define your internal-service forwards once, and `hopd`
 keeps them managed in the background — start/stop on demand, auto-reconnect, a live k9s-style
 dashboard — instead of juggling a dozen `ssh -L` terminal windows.
