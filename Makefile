@@ -1,0 +1,20 @@
+.PHONY: build gui gui-package test
+
+build:
+	go build -o hopd ./cmd/hopd
+
+gui:
+	go build -o hopd-gui ./cmd/hopd-gui
+
+# Package the menu-bar app as hopd-gui.app (requires `go install fyne.io/fyne/v2/cmd/fyne@v2.7.4`).
+# Builds the bundle with the repo-root Icon.png, then sets LSUIElement so the
+# app lives only in the menu bar (no Dock icon).
+gui-package:
+	fyne package --target darwin --src ./cmd/hopd-gui \
+		--name hopd-gui --id com.gavinyangai.hopd.gui --icon "$(CURDIR)/Icon.png" --release
+	/usr/libexec/PlistBuddy -c "Add :LSUIElement bool true" "hopd-gui.app/Contents/Info.plist" \
+		|| /usr/libexec/PlistBuddy -c "Set :LSUIElement true" "hopd-gui.app/Contents/Info.plist"
+	@echo "Built hopd-gui.app (menu-bar only)."
+
+test:
+	go test ./...

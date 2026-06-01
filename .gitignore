@@ -1,0 +1,6 @@
+/hopd
+/hopd-gui
+/hopd-gui.app/
+/dist/
+*.log
+.DS_Store

@@ -1,0 +1,12 @@
+Website = "https://github.com/GavinYangAI/hopd"
+
+[Details]
+Icon = "Icon.png"
+Name = "hopd-gui"
+ID = "com.gavinyangai.hopd.gui"
+Version = "0.1.0"
+Build = 1
+
+[LinuxAndBSD]
+GenericName = "SSH tunnel manager"
+Categories = ["Network", "Utility"]
