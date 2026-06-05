@@ -41,6 +41,7 @@ groups:
       local: 5432                # 127.0.0.1:5432(只写端口则绑定 127.0.0.1)
       remote: 10.0.1.5:5432      # 最终目标 host:port,经跳板到达
       via: prod-bastion          # ~/.ssh/config 里的一个 Host 别名
+      autostart: true            # 守护进程启动时自动连接这条隧道
     - name: prod-redis
       local: 6379
       remote: 10.0.1.6:6379
@@ -57,13 +58,17 @@ groups:
   已经配好 `ProxyJump` 的别名。
 - **`jump`** —— 内联的 `ProxyJump` 跳板链,可与 `via` 组合使用。
 - **`remote`** —— 最终目标的 `host:port`,相对于最后一跳所在的网络。
+- **`autostart`** —— 守护进程启动时自动把这条隧道拉起来,这样**重启电脑后会自动重连**(配合
+  `hopd install` 装的 launchd agent)。默认关闭;把你总要用的隧道标上即可。需要 2FA 的目标会停在
+  `NEEDS_AUTH`,跑一次 `hopd auth <name>` 即可。
 
 hopd 默认还会注入 `ControlMaster`/`ControlPersist` 与 `ExitOnForwardFailure=yes`
 (可在 `ssh_options` 里按隧道覆盖)。
 
 ## 使用
 
-守护进程统管一切;隧道默认是**停止**状态,你按需把要用的拉起来。
+守护进程统管一切。标了 `autostart` 的隧道会随守护进程启动自动连接(所以重启后会自动重连);
+其余隧道默认是**停止**状态,你按需把要用的拉起来。
 
 ```sh
 hopd daemon            # 前台运行supervisor(launchd 用的就是它)
@@ -111,7 +116,9 @@ make gui-package                      # 生成 hopd-gui.app
 
 把 `hopd-gui.app` 加到 **系统设置 → 通用 → 登录项** 即可开机自启。GUI 是个轻客户端:
 它控制的是与 CLI/TUI 同一个后台守护进程,所以退出 GUI 不会停掉你的隧道。若 daemon 没在运行,
-菜单里会出现 **启动 daemon**(优先用 `hopd install` 装的 launchd agent,否则从 PATH 里拉起 `hopd daemon`)。
+菜单里会出现 **启动 daemon**(优先用 `hopd install` 装的 launchd agent,否则拉起 `hopd daemon`)
+和 **安装并开机自启**(装好 launchd agent,让 daemon 开机自动启动)。从 Finder 启动时 GUI 继承的
+PATH 很精简,所以它除了 PATH 还会自动到 `/usr/local/bin`、Homebrew、`~/go/bin` 等位置找 `hopd`。
 
 需要 2FA 的隧道显示为 `⚠ …(auth)`;在终端里跑 `hopd auth <name>` 完成认证
 (GUI 本身不弹验证码输入框)。

@@ -1,9 +1,43 @@
 package gui
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 )
+
+func TestLocateHopd_PrefersPATH(t *testing.T) {
+	got := locateHopdWith(
+		func(string) (string, error) { return "/from/path/hopd", nil },
+		func(string) bool { return true },
+		[]string{"/usr/local/bin/hopd"},
+	)
+	if got != "/from/path/hopd" {
+		t.Fatalf("got %q, want the PATH result", got)
+	}
+}
+
+func TestLocateHopd_FallsBackToCandidate(t *testing.T) {
+	got := locateHopdWith(
+		func(string) (string, error) { return "", errors.New("not on PATH") },
+		func(p string) bool { return p == "/opt/homebrew/bin/hopd" },
+		[]string{"/usr/local/bin/hopd", "/opt/homebrew/bin/hopd"},
+	)
+	if got != "/opt/homebrew/bin/hopd" {
+		t.Fatalf("got %q, want the existing candidate", got)
+	}
+}
+
+func TestLocateHopd_NoneFound(t *testing.T) {
+	got := locateHopdWith(
+		func(string) (string, error) { return "", errors.New("nope") },
+		func(string) bool { return false },
+		[]string{"/usr/local/bin/hopd"},
+	)
+	if got != "" {
+		t.Fatalf("got %q, want empty when nothing is found", got)
+	}
+}
 
 func TestDaemonStartArgs_LaunchAgentPresent(t *testing.T) {
 	cmd, args, err := daemonStartArgs(true, "501", "/usr/local/bin/hopd")

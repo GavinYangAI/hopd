@@ -5,6 +5,27 @@ import (
 	"time"
 )
 
+func TestParseYAML_Autostart(t *testing.T) {
+	src := `
+groups:
+  g:
+    - {name: auto, local: "1", remote: h:1, via: x, autostart: true}
+    - {name: manual, local: "2", remote: h:2, via: x}
+`
+	cfg, err := Parse([]byte(src))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	auto, _ := cfg.Tunnel("auto")
+	if !auto.Autostart {
+		t.Fatal("tunnel with autostart: true should have Autostart=true")
+	}
+	manual, _ := cfg.Tunnel("manual")
+	if manual.Autostart {
+		t.Fatal("tunnel without autostart should default to Autostart=false")
+	}
+}
+
 func TestParseYAML_FullConfig(t *testing.T) {
 	src := `
 defaults:

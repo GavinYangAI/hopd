@@ -11,9 +11,10 @@ type Handlers struct {
 	Open        func()            // open the dashboard window
 	AllUp       func()
 	AllDown     func()
-	Reload      func()
-	Quit        func()
-	StartDaemon func()            // shown only when disconnected
+	Reload       func()
+	Quit         func()
+	StartDaemon  func() // shown only when disconnected
+	InstallAgent func() // install the launchd autostart agent (disconnected)
 	Theme       string            // name of the active theme
 	SetTheme    func(name string) // switch the active theme
 }
@@ -50,8 +51,9 @@ func buildMenu(m gui.MenuModel, h Handlers) *fyne.Menu {
 
 	if !m.Connected {
 		start := fyne.NewMenuItem("启动 daemon", func() { call(h.StartDaemon) })
+		install := fyne.NewMenuItem("安装并开机自启", func() { call(h.InstallAgent) })
 		quit := fyne.NewMenuItem("退出", func() { call(h.Quit) })
-		items = append(items, start, themeMenu(h), fyne.NewMenuItemSeparator(), quit)
+		items = append(items, start, install, themeMenu(h), fyne.NewMenuItemSeparator(), quit)
 		return fyne.NewMenu("hopd", items...)
 	}
 

@@ -27,6 +27,9 @@ type TunnelForm struct {
 	Via        string
 	SSHOptions string // multiline key=value, excluding IdentityFile
 
+	// Autostart brings this tunnel up automatically when the daemon starts.
+	Autostart bool
+
 	// RawJump carries a multi-hop jump chain that can't be shown in the single
 	// jump host/user/port fields. It is preserved across an edit unless the user
 	// types a jump host or via (see Parse).
@@ -36,11 +39,12 @@ type TunnelForm struct {
 // Parse converts the form into a config.Tunnel.
 func (f TunnelForm) Parse() (config.Tunnel, error) {
 	t := config.Tunnel{
-		Name:   strings.TrimSpace(f.Name),
-		Group:  strings.TrimSpace(f.Group),
-		Local:  strings.TrimSpace(f.LocalPort),
-		Remote: strings.TrimSpace(f.DestHost) + ":" + strings.TrimSpace(f.DestPort),
-		Via:    strings.TrimSpace(f.Via),
+		Name:      strings.TrimSpace(f.Name),
+		Group:     strings.TrimSpace(f.Group),
+		Local:     strings.TrimSpace(f.LocalPort),
+		Remote:    strings.TrimSpace(f.DestHost) + ":" + strings.TrimSpace(f.DestPort),
+		Via:       strings.TrimSpace(f.Via),
+		Autostart: f.Autostart,
 	}
 
 	switch {
@@ -101,6 +105,7 @@ func ToForm(t config.Tunnel) TunnelForm {
 		Group:     t.Group,
 		LocalPort: t.Local,
 		Via:       t.Via,
+		Autostart: t.Autostart,
 	}
 	if i := strings.LastIndex(t.Remote, ":"); i >= 0 {
 		f.DestHost = t.Remote[:i]

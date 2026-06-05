@@ -49,6 +49,39 @@ groups:
 	}
 }
 
+func TestMarshal_AutostartRoundTrip(t *testing.T) {
+	cfg, _ := Parse([]byte(`
+groups:
+  g:
+    - {name: auto, local: "1", remote: h:1, via: x, autostart: true}
+    - {name: manual, local: "2", remote: h:2, via: x}
+`))
+	out, err := Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg2, err := Parse(out)
+	if err != nil {
+		t.Fatalf("re-parse: %v\n%s", err, out)
+	}
+	if auto, _ := cfg2.Tunnel("auto"); !auto.Autostart {
+		t.Fatalf("autostart=true lost in round-trip:\n%s", out)
+	}
+	if manual, _ := cfg2.Tunnel("manual"); manual.Autostart {
+		t.Fatalf("manual tunnel should not gain autostart:\n%s", out)
+	}
+}
+
+// A manual tunnel (autostart=false) should not emit an autostart line at all,
+// keeping the generated YAML clean.
+func TestMarshal_OmitsFalseAutostart(t *testing.T) {
+	cfg, _ := Parse([]byte("groups:\n  g:\n    - {name: a, local: \"1\", remote: h:1, via: x}\n"))
+	out, _ := Marshal(cfg)
+	if countSub(string(out), "autostart") != 0 {
+		t.Fatalf("autostart should be omitted for false:\n%s", out)
+	}
+}
+
 func TestMarshal_HasHeaderComment(t *testing.T) {
 	cfg, _ := Parse([]byte("groups:\n  g:\n    - {name: a, local: \"1\", remote: h:1, via: x}\n"))
 	out, err := Marshal(cfg)

@@ -25,6 +25,7 @@ type editForm struct {
 	jumpHost, jumpPort     *widget.Entry
 	jumpUser, keyFile      *widget.Entry
 	via, sshOptions        *widget.Entry
+	autostart              *widget.Check
 	rawJump                []string
 
 	route string // gui.RouteDirect | gui.RouteRelay | ""
@@ -85,6 +86,7 @@ func newEditForm(f gui.TunnelForm) *editForm {
 		keyFile:    widget.NewEntry(),
 		via:        widget.NewEntry(),
 		sshOptions: widget.NewMultiLineEntry(),
+		autostart:  widget.NewCheck("开机自动连接（守护进程启动时自动建立此隧道）", nil),
 		rawJump:    f.RawJump,
 		route:      gui.RouteOf(f),
 		captions:   map[string]*captionLabel{},
@@ -122,6 +124,7 @@ func newEditForm(f gui.TunnelForm) *editForm {
 	ef.keyFile.SetText(f.KeyFile)
 	ef.via.SetText(f.Via)
 	ef.sshOptions.SetText(f.SSHOptions)
+	ef.autostart.SetChecked(f.Autostart)
 
 	ef.build(f)
 	ef.refresh()
@@ -158,6 +161,7 @@ func (ef *editForm) build(f gui.TunnelForm) {
 			ef.field("分组", false, "归类用，随意填", "group", ef.group),
 			ef.field("本地端口", true, "在本机用这个端口访问", "localPort", ef.localPort),
 		),
+		ef.autostart,
 	)
 
 	// ② target
@@ -419,6 +423,7 @@ func (ef *editForm) value() gui.TunnelForm {
 		KeyFile:    ef.keyFile.Text,
 		Via:        ef.via.Text,
 		SSHOptions: ef.sshOptions.Text,
+		Autostart:  ef.autostart.Checked,
 		RawJump:    ef.rawJump,
 	}
 }

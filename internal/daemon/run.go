@@ -9,8 +9,9 @@ import (
 	"github.com/GavinYangAI/hopd/internal/tunnel"
 )
 
-// Run loads config, starts the control server, and supervises until ctx is
-// cancelled. Tunnels start DOWN; clients bring them up on demand.
+// Run loads config, starts the control server, brings up any autostart tunnels,
+// and supervises until ctx is cancelled. Non-autostart tunnels start DOWN;
+// clients bring them up on demand.
 func Run(ctx context.Context, configFile, sockPath, controlDir, sshPath string) error {
 	if err := os.MkdirAll(filepath.Dir(sockPath), 0o700); err != nil {
 		return err
@@ -33,6 +34,7 @@ func Run(ctx context.Context, configFile, sockPath, controlDir, sshPath string) 
 		return err
 	}
 	mgr := NewManager(sshPath, cfg)
+	mgr.StartAutostart()
 	srv := NewServer(sockPath, mgr, load)
 
 	errc := make(chan error, 1)

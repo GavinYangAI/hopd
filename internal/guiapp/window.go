@@ -342,7 +342,7 @@ func (d *dashboard) addTunnel() {
 	if d.store == nil {
 		return
 	}
-	showEditDialog(d.win, "新增隧道", gui.TunnelForm{}, func(f gui.TunnelForm) error {
+	showEditDialog(d.win, "新增隧道", gui.TunnelForm{Autostart: true}, func(f gui.TunnelForm) error {
 		tn, err := f.Parse()
 		if err != nil {
 			return err

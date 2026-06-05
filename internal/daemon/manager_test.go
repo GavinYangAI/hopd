@@ -96,6 +96,27 @@ func TestManager_UpAll(t *testing.T) {
 	})
 }
 
+func TestManager_StartAutostart(t *testing.T) {
+	cfg, err := config.Parse([]byte(`
+defaults:
+  restart: { min: 1ms, max: 5ms }
+groups:
+  g1:
+    - { name: auto, local: 15010, remote: h:80, via: bastion, autostart: true }
+    - { name: manual, local: 15011, remote: h:80, via: bastion }
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := NewManager(fakeSSH(t, "sleep 30"), cfg)
+	defer m.StopAll()
+	m.StartAutostart()
+	eventually(t, 2*time.Second, func() bool { return stateOf(m, "auto") != "DOWN" })
+	if stateOf(m, "manual") != "DOWN" {
+		t.Fatalf("manual tunnel should stay DOWN; autostart only starts marked tunnels")
+	}
+}
+
 func TestManager_UnknownTarget(t *testing.T) {
 	m := NewManager(fakeSSH(t, "sleep 30"), testCfg(t))
 	defer m.StopAll()

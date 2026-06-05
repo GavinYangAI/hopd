@@ -84,6 +84,13 @@ func (u *ui) handlers() Handlers {
 				u.app.SendNotification(fyne.NewNotification("hopd", err.Error()))
 			}
 		},
+		InstallAgent: func() {
+			if err := gui.InstallAgent(); err != nil {
+				u.app.SendNotification(fyne.NewNotification("hopd", err.Error()))
+				return
+			}
+			u.app.SendNotification(fyne.NewNotification("hopd", "已开启开机自启，daemon 即将启动"))
+		},
 		Theme:    activeTheme,
 		SetTheme: u.setTheme,
 	}

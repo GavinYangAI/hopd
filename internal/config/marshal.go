@@ -31,6 +31,7 @@ type marshalTunnel struct {
 	Via        string            `yaml:"via,omitempty"`
 	Jump       []string          `yaml:"jump,omitempty"`
 	SSHOptions map[string]string `yaml:"ssh_options,omitempty"`
+	Autostart  bool              `yaml:"autostart,omitempty"`
 }
 
 // Marshal serializes a Config back to YAML. It writes the retained defaults and,
@@ -49,11 +50,12 @@ func Marshal(c *Config) ([]byte, error) {
 
 	for _, t := range c.tunnels {
 		mt := marshalTunnel{
-			Name:   t.Name,
-			Local:  t.Local,
-			Remote: t.Remote,
-			Via:    t.Via,
-			Jump:   t.Jump,
+			Name:      t.Name,
+			Local:     t.Local,
+			Remote:    t.Remote,
+			Via:       t.Via,
+			Jump:      t.Jump,
+			Autostart: t.Autostart,
 		}
 		opts := map[string]string{}
 		for k, v := range t.SSHOptions {

@@ -42,6 +42,7 @@ groups:
       local: 5432                # 127.0.0.1:5432 (bare port binds 127.0.0.1)
       remote: 10.0.1.5:5432      # final target:port, reached via the jump
       via: prod-bastion          # a Host alias from ~/.ssh/config
+      autostart: true            # bring this tunnel up when the daemon starts
     - name: prod-redis
       local: 6379
       remote: 10.0.1.6:6379
@@ -58,13 +59,18 @@ groups:
   forward," point `via` at an alias whose `ProxyJump` is already configured.
 - **`jump`** — an inline `ProxyJump` chain. Can be combined with `via`.
 - **`remote`** — `host:port` of the final target, relative to the last hop's network.
+- **`autostart`** — bring this tunnel up automatically when the daemon starts, so it reconnects
+  after a reboot (paired with the launchd agent from `hopd install`). Off by default; mark the
+  tunnels you always want connected. Targets needing 2FA settle into `NEEDS_AUTH` until you run
+  `hopd auth <name>`.
 
 hopd also injects `ControlMaster`/`ControlPersist` and `ExitOnForwardFailure=yes` by default
 (override per-tunnel via `ssh_options`).
 
 ## Use
 
-The daemon supervises everything; tunnels start **down** and you bring up what you need.
+The daemon supervises everything. Tunnels marked `autostart` come up when the daemon starts
+(so they reconnect after a reboot); the rest start **down** and you bring up what you need.
 
 ```sh
 hopd daemon            # run the supervisor in the foreground (launchd uses this)
@@ -116,7 +122,10 @@ Add `hopd-gui.app` to **System Settings → General → Login Items** to start i
 login. The GUI is a thin client: it controls the same background daemon as the
 CLI/TUI, so quitting the GUI leaves your tunnels running. If the daemon isn't
 running, the menu offers **Start daemon** (uses the launchd agent from
-`hopd install` if present, otherwise launches `hopd daemon` from your PATH).
+`hopd install` if present, otherwise launches `hopd daemon`) and **Install &
+autostart** (`安装并开机自启`), which installs the launchd agent so the daemon
+starts at login. The GUI finds the `hopd` binary even when launched from Finder
+with a minimal PATH — it also checks `/usr/local/bin`, Homebrew, and `~/go/bin`.
 
 A tunnel needing 2FA shows as `⚠ … (auth)`; run `hopd auth <name>` in a terminal
 to authenticate it (the GUI does not prompt for codes itself).

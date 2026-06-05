@@ -26,6 +26,7 @@ type Tunnel struct {
 	Via        string            // ssh config Host alias (optional)
 	Jump       []string          // inline -J chain (optional)
 	SSHOptions map[string]string // merged defaults + per-tunnel
+	Autostart  bool              // bring this tunnel up when the daemon starts
 }
 
 // Config is the parsed configuration.
@@ -55,6 +56,7 @@ type rawTunnel struct {
 	Via        string               `yaml:"via"`
 	Jump       []string             `yaml:"jump"`
 	SSHOptions map[string]yaml.Node `yaml:"ssh_options"`
+	Autostart  bool                 `yaml:"autostart"`
 }
 
 // Parse parses YAML bytes into a Config, merging defaults into each tunnel.
@@ -110,6 +112,7 @@ func Parse(data []byte) (*Config, error) {
 				Via:        rt.Via,
 				Jump:       rt.Jump,
 				SSHOptions: opts,
+				Autostart:  rt.Autostart,
 			}
 			cfg.byName[t.Name] = len(cfg.tunnels)
 			cfg.tunnels = append(cfg.tunnels, t)

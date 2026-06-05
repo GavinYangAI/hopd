@@ -7,6 +7,23 @@ import (
 	"github.com/GavinYangAI/hopd/internal/config"
 )
 
+func TestTunnelForm_AutostartRoundTrip(t *testing.T) {
+	f := TunnelForm{
+		Name: "x", LocalPort: "1", DestHost: "h", DestPort: "2", Via: "b",
+		Autostart: true,
+	}
+	tn, err := f.Parse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !tn.Autostart {
+		t.Fatal("Parse should carry Autostart into the tunnel")
+	}
+	if back := ToForm(tn); !back.Autostart {
+		t.Fatal("ToForm should carry Autostart back into the form")
+	}
+}
+
 func TestTunnelForm_Parse_JumpFields(t *testing.T) {
 	f := TunnelForm{
 		Name: "win-1", Group: "chuwu", LocalPort: "13389",

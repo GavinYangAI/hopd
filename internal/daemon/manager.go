@@ -30,6 +30,22 @@ func NewManager(sshPath string, cfg *config.Config) *Manager {
 	return m
 }
 
+// StartAutostart brings up every tunnel marked autostart in config. The daemon
+// calls it once at startup so marked tunnels reconnect after a reboot without
+// manual intervention. Tunnels needing interactive auth (2FA/passphrase) settle
+// into NEEDS_AUTH until the user runs `hopd auth`.
+func (m *Manager) StartAutostart() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, t := range m.cfg.Tunnels() {
+		if t.Autostart {
+			if r, ok := m.runners[t.Name]; ok {
+				r.Start()
+			}
+		}
+	}
+}
+
 // Up starts the runners matched by target (name | group | "all"/"").
 func (m *Manager) Up(target string) error {
 	m.mu.Lock()

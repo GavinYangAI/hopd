@@ -51,6 +51,16 @@ func TestBuildMenu_Disconnected(t *testing.T) {
 	}
 }
 
+func TestBuildMenu_DisconnectedHasInstallAgent(t *testing.T) {
+	m := gui.MenuModel{Connected: false, Summary: "daemon not running"}
+	var installed bool
+	menu := buildMenu(m, Handlers{InstallAgent: func() { installed = true }})
+	findItem(t, menu, "安装并开机自启").Action()
+	if !installed {
+		t.Fatal("install-agent menu item not wired")
+	}
+}
+
 func TestBuildMenu_ConnectedTogglesAndActions(t *testing.T) {
 	m := gui.MenuModel{
 		Connected: true,

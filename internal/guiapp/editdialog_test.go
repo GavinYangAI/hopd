@@ -29,6 +29,20 @@ func TestNewEditForm_PrefillsAndReads(t *testing.T) {
 	}
 }
 
+func TestNewEditForm_CarriesAutostart(t *testing.T) {
+	_ = test.NewApp()
+	ef := newEditForm(gui.TunnelForm{
+		Name: "a", LocalPort: "1", DestHost: "h", DestPort: "2", Autostart: true,
+	})
+	if !ef.value().Autostart {
+		t.Fatal("autostart checkbox should round-trip through the form")
+	}
+	ef2 := newEditForm(gui.TunnelForm{Name: "b", LocalPort: "2", DestHost: "h", DestPort: "3"})
+	if ef2.value().Autostart {
+		t.Fatal("autostart should default to false when the tunnel is not marked")
+	}
+}
+
 func TestNewEditForm_PreservesRawJump(t *testing.T) {
 	_ = test.NewApp()
 	initial := gui.TunnelForm{
