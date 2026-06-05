@@ -7,16 +7,16 @@ import (
 
 // Handlers are the callbacks the tray menu invokes. Any may be nil.
 type Handlers struct {
-	Toggle      func(name string) // toggle one tunnel up/down
-	Open        func()            // open the dashboard window
-	AllUp       func()
-	AllDown     func()
+	Toggle       func(name string) // toggle one tunnel up/down
+	Open         func()            // open the dashboard window
+	AllUp        func()
+	AllDown      func()
 	Reload       func()
 	Quit         func()
-	StartDaemon  func() // shown only when disconnected
-	InstallAgent func() // install the launchd autostart agent (disconnected)
-	Theme       string            // name of the active theme
-	SetTheme    func(name string) // switch the active theme
+	StartDaemon  func()            // shown only when disconnected
+	InstallAgent func()            // install the launchd autostart agent (disconnected)
+	Theme        string            // name of the active theme
+	SetTheme     func(name string) // switch the active theme
 }
 
 // themeMenu builds the "主题" submenu with the active theme checked.
