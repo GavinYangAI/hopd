@@ -2,9 +2,38 @@ package gui
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 )
+
+func TestHopdCandidates_SelfDirNotFirst(t *testing.T) {
+	c := hopdCandidates("/Apps/hopd-gui.app/Contents/MacOS", "/home/u")
+	if len(c) > 0 && c[0] == "/Apps/hopd-gui.app/Contents/MacOS/hopd" {
+		t.Fatal("the app's own dir is attacker-co-resident and gets baked into autostart; it must not be the first candidate")
+	}
+}
+
+func TestIsExecutable_RejectsGroupOrWorldWritable(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "hopd")
+	if err := os.WriteFile(p, []byte("#!/bin/sh\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(p, 0o775); err != nil { // group-writable + executable
+		t.Fatal(err)
+	}
+	if isExecutable(p) {
+		t.Fatal("group/world-writable binary must be rejected (it could be planted)")
+	}
+	if err := os.Chmod(p, 0o755); err != nil { // owner-only-writable
+		t.Fatal(err)
+	}
+	if !isExecutable(p) {
+		t.Fatal("owner-only-writable executable should be accepted")
+	}
+}
 
 func TestLocateHopd_PrefersPATH(t *testing.T) {
 	got := locateHopdWith(

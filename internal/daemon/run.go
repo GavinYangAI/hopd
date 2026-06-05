@@ -16,6 +16,9 @@ func Run(ctx context.Context, configFile, sockPath, controlDir, sshPath string) 
 	if err := os.MkdirAll(filepath.Dir(sockPath), 0o700); err != nil {
 		return err
 	}
+	// MkdirAll won't tighten an already-existing dir, so chmod explicitly: a
+	// pre-existing loose ~/.config/hopd must not leave the socket reachable.
+	_ = os.Chmod(filepath.Dir(sockPath), 0o700)
 	if err := os.MkdirAll(controlDir, 0o700); err != nil {
 		return err
 	}

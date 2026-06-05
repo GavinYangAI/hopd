@@ -1,6 +1,8 @@
 package gui
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,6 +10,31 @@ import (
 
 	"github.com/GavinYangAI/hopd/internal/config"
 )
+
+func TestConfigStore_SaveSurvivesReloadFailure(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(path, []byte("groups:\n  g:\n    - {name: a, local: \"1\", remote: h:1, via: x}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := NewConfigStore(path, func() error { return fmt.Errorf("daemon offline") })
+	cfg, _ := s.Load()
+	if err := cfg.AddTunnel(cfgTunnel("b", "2")); err != nil {
+		t.Fatal(err)
+	}
+	err := s.Save(cfg)
+	if !errors.Is(err, ErrReloadAfterSave) {
+		t.Fatalf("reload failure should surface as ErrReloadAfterSave, got %v", err)
+	}
+	// The config must be persisted despite the reload failure.
+	reloaded, lerr := s.Load()
+	if lerr != nil {
+		t.Fatal(lerr)
+	}
+	if len(reloaded.Tunnels()) != 2 {
+		t.Fatalf("config not persisted despite reload failure, got %d tunnels", len(reloaded.Tunnels()))
+	}
+}
 
 func cfgTunnel(name, port string) config.Tunnel {
 	return config.Tunnel{Name: name, Group: "g", Local: port, Remote: "h:9", Via: "x"}

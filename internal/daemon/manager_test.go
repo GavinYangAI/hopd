@@ -117,6 +117,47 @@ groups:
 	}
 }
 
+func TestManager_ReloadAppliesChangedRestartBounds(t *testing.T) {
+	cfg1, err := config.Parse([]byte(`
+defaults: { restart: { min: 1s, max: 2s } }
+groups: { g: [{ name: a, local: 15050, remote: h:80, via: bastion }] }
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := NewManager(fakeSSH(t, "sleep 30"), cfg1)
+	defer m.StopAll()
+	r1 := m.runners["a"]
+
+	cfg2, err := config.Parse([]byte(`
+defaults: { restart: { min: 5s, max: 9s } }
+groups: { g: [{ name: a, local: 15050, remote: h:80, via: bastion }] }
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Reload(cfg2); err != nil {
+		t.Fatal(err)
+	}
+	if m.runners["a"] == r1 {
+		t.Fatal("runner should be rebuilt when restart bounds change, else new backoff never takes effect")
+	}
+}
+
+func TestManager_ReloadReusesUnchangedTunnel(t *testing.T) {
+	cfg := testCfg(t)
+	m := NewManager(fakeSSH(t, "sleep 30"), cfg)
+	defer m.StopAll()
+	r1 := m.runners["a"]
+	// Same config (same bounds, same tunnels) must reuse the runner in place.
+	if err := m.Reload(testCfg(t)); err != nil {
+		t.Fatal(err)
+	}
+	if m.runners["a"] != r1 {
+		t.Fatal("unchanged tunnel with unchanged bounds should keep its runner")
+	}
+}
+
 func TestManager_UnknownTarget(t *testing.T) {
 	m := NewManager(fakeSSH(t, "sleep 30"), testCfg(t))
 	defer m.StopAll()

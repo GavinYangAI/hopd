@@ -1,6 +1,7 @@
 package guiapp
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -408,7 +409,11 @@ func (d *dashboard) deleteTunnel() {
 			return
 		}
 		if err := d.store.Save(cfg); err != nil {
-			dialog.ShowError(err, d.win)
+			if errors.Is(err, gui.ErrReloadAfterSave) {
+				dialog.ShowInformation("已删除", "配置已保存。daemon 未运行，将在它启动后生效。", d.win)
+			} else {
+				dialog.ShowError(err, d.win)
+			}
 		}
 	}, d.win)
 }

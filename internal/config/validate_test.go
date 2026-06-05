@@ -26,6 +26,32 @@ groups:
 	}
 }
 
+func TestValidate_RestartBounds(t *testing.T) {
+	cases := []struct{ name, src, want string }{
+		{"min zero", `
+defaults: { restart: { min: 0s, max: 60s } }
+groups: { g: [{ name: a, local: "1", remote: h:1, via: x }] }
+`, "restart.min"},
+		{"min negative", `
+defaults: { restart: { min: -1s, max: 60s } }
+groups: { g: [{ name: a, local: "1", remote: h:1, via: x }] }
+`, "restart.min"},
+		{"max below min", `
+defaults: { restart: { min: 10s, max: 5s } }
+groups: { g: [{ name: a, local: "1", remote: h:1, via: x }] }
+`, "restart.max"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := mustParse(t, tc.src)
+			err := cfg.Validate()
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("Validate() = %v, want error containing %q", err, tc.want)
+			}
+		})
+	}
+}
+
 func TestValidate_Errors(t *testing.T) {
 	cases := []struct {
 		name string

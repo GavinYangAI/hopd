@@ -118,13 +118,18 @@ func (m *Manager) StopAll() {
 func (m *Manager) Reload(cfg *config.Config) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	// Restart backoff bounds live in cfg.Restart, not in a tunnel's Spec, so a
+	// bounds-only edit wouldn't otherwise reach reused runners. When they change,
+	// force every runner to rebuild (preserving active state) so the new bounds
+	// take effect.
+	boundsChanged := m.cfg.Restart != cfg.Restart
 	old := m.runners
 	next := map[string]*tunnel.Runner{}
 	var order []string
 	for _, t := range cfg.Tunnels() {
 		order = append(order, t.Name)
 		if r, ok := old[t.Name]; ok {
-			if reflect.DeepEqual(r.Spec(), t) {
+			if !boundsChanged && reflect.DeepEqual(r.Spec(), t) {
 				next[t.Name] = r
 				delete(old, t.Name)
 				continue

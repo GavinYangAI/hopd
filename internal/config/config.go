@@ -149,6 +149,13 @@ func scalarString(n yaml.Node) string {
 
 // Validate checks semantic correctness across all tunnels.
 func (c *Config) Validate() error {
+	if c.Restart.Min <= 0 {
+		return fmt.Errorf("restart.min must be > 0, got %s", c.Restart.Min)
+	}
+	if c.Restart.Max < c.Restart.Min {
+		return fmt.Errorf("restart.max (%s) must be >= restart.min (%s)", c.Restart.Max, c.Restart.Min)
+	}
+
 	seenName := map[string]bool{}
 	seenLocal := map[string]bool{}
 	for _, t := range c.tunnels {

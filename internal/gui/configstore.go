@@ -1,12 +1,20 @@
 package gui
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/GavinYangAI/hopd/internal/config"
 )
+
+// ErrReloadAfterSave reports that the config was written to disk successfully
+// but the follow-up daemon reload failed (typically because the daemon isn't
+// running). The save itself succeeded — callers should treat this as a soft
+// warning ("saved; will take effect when the daemon starts"), not a hard error,
+// and must not re-run Save (which would overwrite the .bak with the new content).
+var ErrReloadAfterSave = errors.New("config saved but daemon reload failed")
 
 // ConfigStore loads and writes the hopd config file for the GUI editor, and
 // asks the daemon to reload after a successful write.
@@ -67,8 +75,13 @@ func (s *ConfigStore) Save(cfg *config.Config) error {
 		_ = os.Remove(tmp) // don't leave a stale temp file behind
 		return fmt.Errorf("replace config: %w", err)
 	}
+	// The config is now safely on disk. A reload failure (e.g. the daemon isn't
+	// running) must not be reported as a save failure — surface it as a soft,
+	// distinguishable warning so the UI can close the dialog and inform gently.
 	if s.reload != nil {
-		return s.reload()
+		if err := s.reload(); err != nil {
+			return fmt.Errorf("%w: %v", ErrReloadAfterSave, err)
+		}
 	}
 	return nil
 }

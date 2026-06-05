@@ -47,10 +47,13 @@ func newUI(a fyne.App, ctrl *gui.Controller) *ui {
 // applyUpdate refreshes tray + window + icon for a snapshot. Safe to call from
 // any goroutine: it marshals UI work onto the main thread with fyne.Do.
 func (u *ui) applyUpdate(snap []ipc.TunnelStatus, connected bool) {
-	u.lastSnap, u.lastConnected = snap, connected
 	model := gui.BuildMenuModel(snap, connected)
 	overall := gui.OverallState(snap, connected)
 	fyne.Do(func() {
+		// lastSnap/lastConnected are also read by setTheme on the main thread.
+		// Writing them inside fyne.Do serializes both access sites on the main
+		// thread, removing the data race with the controller goroutine.
+		u.lastSnap, u.lastConnected = snap, connected
 		if desk, ok := u.app.(desktop.App); ok {
 			desk.SetSystemTrayMenu(buildMenu(model, u.handlers()))
 			desk.SetSystemTrayIcon(iconFor(overall))

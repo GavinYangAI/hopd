@@ -1,6 +1,7 @@
 package guiapp
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 
@@ -441,6 +442,13 @@ func showEditDialog(win fyne.Window, title string, initial gui.TunnelForm, onSub
 			return
 		}
 		if err := onSubmit(ef.value()); err != nil {
+			if errors.Is(err, gui.ErrReloadAfterSave) {
+				// Config saved; the daemon just isn't running. Close and inform
+				// gently instead of showing a red error over a successful save.
+				dlg.Hide()
+				dialog.ShowInformation("已保存", "配置已保存。daemon 未运行，将在它启动后生效。", win)
+				return
+			}
 			dialog.ShowError(err, win)
 			return
 		}

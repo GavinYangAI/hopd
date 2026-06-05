@@ -37,6 +37,9 @@ func (s *Server) Serve() error {
 	if err != nil {
 		return err
 	}
+	// Owner-only, independent of umask and of the parent dir's mode, so no other
+	// local UID can connect to the control socket (no peer auth beyond this).
+	_ = os.Chmod(s.sock, 0o600)
 	s.mu.Lock()
 	s.ln = ln
 	s.mu.Unlock()

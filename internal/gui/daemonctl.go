@@ -40,22 +40,31 @@ func locateHopdWith(lookPath func(string) (string, error), isExec func(string) b
 	return ""
 }
 
-// hopdCandidates lists well-known hopd install locations in priority order,
-// including the GUI app's own directory (handy for a side-by-side dev build).
+// hopdCandidates lists well-known hopd install locations in priority order.
+// The GUI app's own directory is last and lowest-trust: the chosen path is
+// persisted into an autostart launchd job, and an app run from a writable
+// location (Downloads, a DMG) could have a malicious "hopd" dropped beside it.
 func hopdCandidates(selfDir, home string) []string {
 	return []string{
-		filepath.Join(selfDir, "hopd"),
 		"/usr/local/bin/hopd",
 		"/opt/homebrew/bin/hopd",
 		filepath.Join(home, "bin", "hopd"),
 		filepath.Join(home, "go", "bin", "hopd"),
+		filepath.Join(selfDir, "hopd"),
 	}
 }
 
-// isExecutable reports whether path is a regular, executable file.
+// isExecutable reports whether path is a regular, executable file that is NOT
+// group- or world-writable. The writability check matters because the result is
+// baked into an autostart job: a plantable (group/other-writable) binary must
+// not be auto-selected.
 func isExecutable(path string) bool {
 	fi, err := os.Stat(path)
-	return err == nil && !fi.IsDir() && fi.Mode()&0o111 != 0
+	if err != nil || fi.IsDir() {
+		return false
+	}
+	mode := fi.Mode()
+	return mode&0o111 != 0 && mode&0o022 == 0
 }
 
 // locateHopd finds the hopd binary on PATH or in well-known locations.

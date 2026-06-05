@@ -6,13 +6,21 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
+
+// plistEscaper escapes the XML metacharacters that can appear in a filesystem
+// path (& < >), so a home/install dir like /Users/R&D/... can't produce a
+// malformed plist (and launchctl load silently fail) or inject extra keys.
+var plistEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
 
 // Label is the launchd job label.
 const Label = "com.gavinyangai.hopd"
 
 // PlistContent renders the launchd plist for the hopd daemon.
 func PlistContent(execPath, logPath string) string {
+	execPath = plistEscaper.Replace(execPath)
+	logPath = plistEscaper.Replace(logPath)
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
