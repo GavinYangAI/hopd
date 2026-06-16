@@ -48,6 +48,29 @@ func TestBuildArgs_InlineJump_NoVia(t *testing.T) {
 	}
 }
 
+func TestBuildArgsVia(t *testing.T) {
+	tun := config.Tunnel{
+		Name:    "pg",
+		Local:   "5432",
+		Remote:  "10.0.1.5:5432",
+		ViaHost: "entryA",
+		SSHOptions: map[string]string{
+			"ExitOnForwardFailure": "yes",
+		},
+	}
+	got := BuildArgsVia(tun, "/tmp/hopd/pg.sshcfg", "entryA")
+	want := []string{
+		"-F", "/tmp/hopd/pg.sshcfg",
+		"-N", "-T",
+		"-o", "ExitOnForwardFailure=yes",
+		"-L", "127.0.0.1:5432:10.0.1.5:5432",
+		"entryA",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v\nwant %v", got, want)
+	}
+}
+
 func TestBuildArgs_JumpPlusVia_SortedOptions(t *testing.T) {
 	tn := config.Tunnel{
 		Name:   "x",
