@@ -9,6 +9,7 @@ import (
 type Handlers struct {
 	Toggle       func(name string) // toggle one tunnel up/down
 	Open         func()            // open the dashboard window
+	Hosts        func()            // open the hosts manager window
 	AllUp        func()
 	AllDown      func()
 	Reload       func()
@@ -77,6 +78,7 @@ func buildMenu(m gui.MenuModel, h Handlers) *fyne.Menu {
 	items = append(items,
 		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem("打开 Dashboard…", func() { call(h.Open) }),
+		fyne.NewMenuItem("主机…", func() { call(h.Hosts) }),
 		fyne.NewMenuItem("全部启动", func() { call(h.AllUp) }),
 		fyne.NewMenuItem("全部停止", func() { call(h.AllDown) }),
 		fyne.NewMenuItem("重载配置", func() { call(h.Reload) }),

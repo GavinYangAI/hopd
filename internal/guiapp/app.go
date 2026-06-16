@@ -78,6 +78,7 @@ func (u *ui) handlers() Handlers {
 			}
 		},
 		Open:    func() { fyne.Do(u.dash.show) },
+		Hosts:   func() { fyne.Do(u.dash.openHosts) },
 		AllUp:   func() { _ = u.ctrl.Up("all") },
 		AllDown: func() { _ = u.ctrl.Down("all") },
 		Reload:  func() { _ = u.ctrl.Reload() },

@@ -235,10 +235,11 @@ func (d *dashboard) buildToolbar() fyne.CanvasObject {
 	rowZone := container.NewHBox(d.selLabel, widget.NewLabel(" "),
 		d.startStop, restart, logs, edit, del)
 
+	hosts := widget.NewButtonWithIcon("主机…", theme.ComputerIcon(), d.openHosts)
 	reload := widget.NewButtonWithIcon("重载", theme.ViewRefreshIcon(), func() { d.run(d.actionReload) })
 	add := widget.NewButtonWithIcon("新增隧道", theme.ContentAddIcon(), d.addTunnel)
 	add.Importance = widget.HighImportance
-	globalZone := container.NewHBox(reload, add)
+	globalZone := container.NewHBox(hosts, reload, add)
 
 	bar := container.NewBorder(nil, nil, rowZone, globalZone)
 	bg := canvas.NewRectangle(pal.barBot)

@@ -7,6 +7,38 @@ import (
 	"github.com/GavinYangAI/hopd/internal/gui"
 )
 
+// menuLabels returns the top-level menu item labels.
+func menuLabels(m *fyne.Menu) []string {
+	var out []string
+	for _, it := range m.Items {
+		out = append(out, it.Label)
+	}
+	return out
+}
+
+func TestBuildMenu_HasHostsItemWhenConnected(t *testing.T) {
+	model := gui.MenuModel{Connected: true, Summary: "ok"}
+	m := buildMenu(model, Handlers{})
+	found := false
+	for _, lbl := range menuLabels(m) {
+		if lbl == "主机…" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("connected menu missing 主机… item: %v", menuLabels(m))
+	}
+}
+
+func TestBuildMenu_NoHostsItemWhenDisconnected(t *testing.T) {
+	m := buildMenu(gui.MenuModel{Connected: false}, Handlers{})
+	for _, lbl := range menuLabels(m) {
+		if lbl == "主机…" {
+			t.Fatal("disconnected menu should not show 主机…")
+		}
+	}
+}
+
 // findItem searches a menu and its submenus for an item by label.
 func findItem(t *testing.T, menu *fyne.Menu, label string) *fyne.MenuItem {
 	t.Helper()
