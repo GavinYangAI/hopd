@@ -1,8 +1,11 @@
 package guiapp
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -11,6 +14,7 @@ import (
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/GavinYangAI/hopd/internal/config"
 	"github.com/GavinYangAI/hopd/internal/gui"
 )
 
@@ -239,3 +243,124 @@ func (hf *hostForm) refresh() {
 func (hf *hostForm) valid() bool {
 	return len(gui.CheckHost(hf.value(), hf.otherNames(), hf.otherNames())) == 0
 }
+
+// showHostDialog presents the host editor modally. On save it adds/updates the
+// host through the store; editingName == "" means adding. onDone runs after a
+// successful save (e.g. to refresh a list).
+func showHostDialog(win fyne.Window, store *gui.ConfigStore, initial gui.HostForm, editingName string, onDone func()) {
+	candidates := jumpCandidates(store, editingName)
+	hf := newHostForm(initial, candidates)
+	hf.editingName = editingName
+
+	dlg := dialog.NewCustomWithoutButtons(hostDialogTitle(editingName), hf.root, win)
+	dlg.Resize(fyne.NewSize(620, 560))
+	hf.onCancel = dlg.Hide
+	hf.onSave = func() {
+		if !hf.valid() {
+			hf.refresh()
+			return
+		}
+		if err := saveHost(store, editingName, hf.value()); err != nil {
+			if errors.Is(err, gui.ErrReloadAfterSave) {
+				dlg.Hide()
+				dialog.ShowInformation("已保存", "主机已保存。daemon 未运行，将在它启动后生效。", win)
+				call(onDone)
+				return
+			}
+			dialog.ShowError(err, win)
+			return
+		}
+		dlg.Hide()
+		call(onDone)
+	}
+	hf.onTest = func() { runHostTest(win, store, hf.value()) }
+	dlg.Show()
+}
+
+func hostDialogTitle(editingName string) string {
+	if editingName == "" {
+		return "新增主机"
+	}
+	return "编辑主机"
+}
+
+// jumpCandidates returns existing host names (excluding editingName) usable as
+// jump targets. A load failure yields an empty list (the dialog still opens).
+func jumpCandidates(store *gui.ConfigStore, editingName string) []string {
+	cfg, err := store.Load()
+	if err != nil {
+		return nil
+	}
+	var names []string
+	for name := range cfg.Hosts() {
+		if name != editingName {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+// saveHost loads, mutates, and saves the config for one host add/update.
+func saveHost(store *gui.ConfigStore, editingName string, f gui.HostForm) error {
+	name, h, err := f.Parse()
+	if err != nil {
+		return err
+	}
+	cfg, err := store.Load()
+	if err != nil {
+		return err
+	}
+	if editingName == "" {
+		if err := cfg.AddHost(name, h); err != nil {
+			return err
+		}
+	} else if name == editingName {
+		if err := cfg.UpdateHost(name, h); err != nil {
+			return err
+		}
+	} else {
+		// Rename: add the new name, then remove the old (UpdateHost can't rename).
+		if err := cfg.AddHost(name, h); err != nil {
+			return err
+		}
+		if err := cfg.RemoveHost(editingName); err != nil {
+			return err
+		}
+	}
+	return store.Save(cfg)
+}
+
+// runHostTest applies the in-progress host to a fresh config copy in memory and
+// runs a test connection, then shows the result/host-key dialog.
+func runHostTest(win fyne.Window, store *gui.ConfigStore, f gui.HostForm) {
+	name, h, err := f.Parse()
+	if err != nil {
+		dialog.ShowError(err, win)
+		return
+	}
+	cfg, err := store.Load()
+	if err != nil {
+		dialog.ShowError(err, win)
+		return
+	}
+	// Apply the edited host into the copy so Generate sees the current values,
+	// without persisting anything.
+	if _, ok := cfg.Host(name); ok {
+		_ = cfg.UpdateHost(name, h)
+	} else {
+		_ = cfg.AddHost(name, h)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	go func() {
+		defer cancel()
+		res := gui.TestConnection(ctx, cfg, name, gui.ExecRunner)
+		fyne.Do(func() { showTestConnDialog(win, name, res) })
+	}()
+}
+
+// ensure config import is used even if a future edit removes the only reference.
+var _ = config.Host{}
+
+// showTestConnDialog is a temporary stub replaced by the real implementation in
+// Task 8 (testconndialog.go).
+func showTestConnDialog(fyne.Window, string, gui.TestConnResult) {}

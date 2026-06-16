@@ -1,6 +1,7 @@
 package guiapp
 
 import (
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -38,4 +39,27 @@ func TestNewHostForm_JumpOptions(t *testing.T) {
 			t.Fatalf("jump options %v missing %q", hf.jump.Options, want)
 		}
 	}
+}
+
+func TestHostForm_SaveButtonGating(t *testing.T) {
+	_ = test.NewApp()
+	hf := newHostForm(gui.HostForm{}, nil) // empty: name+host missing => invalid
+	if !hf.saveBtn.Disabled() {
+		t.Fatal("save should be disabled while required fields are empty")
+	}
+	hf.name.SetText("entryA")
+	hf.host.SetText("198.51.100.7")
+	hf.refresh()
+	if hf.saveBtn.Disabled() {
+		t.Fatalf("save should enable once name+host are filled")
+	}
+}
+
+func TestShowHostDialog_Constructs(t *testing.T) {
+	app := test.NewApp()
+	defer app.Quit()
+	win := app.NewWindow("t")
+	store := gui.NewConfigStore(filepath.Join(t.TempDir(), "config.yaml"), func() error { return nil })
+	// Must not panic constructing/showing the dialog.
+	showHostDialog(win, store, gui.HostForm{Name: "a", Host: "h"}, "", func() {})
 }

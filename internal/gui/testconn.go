@@ -157,6 +157,13 @@ func firstStderrLine(s string) string {
 	return s
 }
 
+// ExecRunner is the exported default CmdRunner the Fyne layer wires into
+// TestConnection / RemoveKnownHostEntry. It delegates to execRunner so the
+// real runner stays a single internal source of truth.
+func ExecRunner(ctx context.Context, name string, args ...string) (stdout, stderr []byte, err error) {
+	return execRunner(ctx, name, args...)
+}
+
 // execRunner is the default real CmdRunner used by the GUI: it runs the command
 // with exec.CommandContext and returns stdout/stderr separately.
 func execRunner(ctx context.Context, name string, args ...string) (stdout, stderr []byte, err error) {
