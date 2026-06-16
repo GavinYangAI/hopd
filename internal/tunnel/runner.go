@@ -320,6 +320,7 @@ func (r *Runner) Snapshot() ipc.TunnelStatus {
 		Local:      r.tunnel.Local,
 		Remote:     r.tunnel.Remote,
 		Via:        r.tunnel.Via,
+		ViaHost:    r.tunnel.ViaHost,
 		UptimeSec:  uptime,
 		Reconnects: r.reconnects,
 		LastError:  r.lastErr,

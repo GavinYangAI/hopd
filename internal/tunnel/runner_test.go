@@ -104,3 +104,11 @@ func TestRunner_FatalForwardErrorStopsRetrying(t *testing.T) {
 		t.Fatalf("fatal error should halt retries; reconnects grew %d -> %d", n1, n2)
 	}
 }
+
+func TestSnapshotCarriesViaHost(t *testing.T) {
+	tun := config.Tunnel{Name: "pg", Local: "5432", Remote: "10.0.1.5:5432", ViaHost: "entryA"}
+	r := NewRunner(tun, "/usr/bin/ssh", time.Second, time.Minute)
+	if got := r.Snapshot().ViaHost; got != "entryA" {
+		t.Fatalf("Snapshot().ViaHost = %q, want entryA", got)
+	}
+}
