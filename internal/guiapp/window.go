@@ -291,9 +291,11 @@ func (d *dashboard) buildToolbar() fyne.CanvasObject {
 
 	hosts := widget.NewButtonWithIcon("主机…", theme.ComputerIcon(), d.openHosts)
 	reload := widget.NewButtonWithIcon("重载", theme.ViewRefreshIcon(), func() { d.run(d.actionReload) })
+	settings := widget.NewButtonWithIcon("设置…", theme.SettingsIcon(), d.openSettings)
+	importBtn := widget.NewButtonWithIcon("从 ~/.ssh/config 导入…", theme.FolderOpenIcon(), d.openImport)
 	add := widget.NewButtonWithIcon("新增隧道", theme.ContentAddIcon(), d.addTunnel)
 	add.Importance = widget.HighImportance
-	globalZone := container.NewHBox(hosts, reload, add)
+	globalZone := container.NewHBox(hosts, reload, settings, importBtn, add)
 
 	bar := container.NewBorder(nil, nil, rowZone, globalZone)
 	bg := canvas.NewRectangle(pal.barBot)
@@ -394,6 +396,27 @@ func (d *dashboard) actionReload() error {
 
 // setStore wires the config store used by Add/Edit/Delete.
 func (d *dashboard) setStore(s *gui.ConfigStore) { d.store = s }
+
+// openSettings shows the global-defaults editor.
+func (d *dashboard) openSettings() {
+	if d.store == nil {
+		return
+	}
+	showSettingsDialog(d.win, d.store)
+}
+
+// openImport shows the ~/.ssh/config import wizard.
+func (d *dashboard) openImport() {
+	if d.store == nil {
+		return
+	}
+	cfg, err := d.store.Load()
+	if err != nil {
+		dialog.ShowError(err, d.win)
+		return
+	}
+	showImportDialog(d.win, cfg, d.store)
+}
 
 // hostNames returns the saved host names for the via_host picker (empty on load
 // error so the dialog still opens).

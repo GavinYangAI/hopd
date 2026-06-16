@@ -77,12 +77,13 @@ func (u *ui) handlers() Handlers {
 				}
 			}
 		},
-		Open:    func() { fyne.Do(u.dash.show) },
-		Hosts:   func() { fyne.Do(u.dash.openHosts) },
-		AllUp:   func() { _ = u.ctrl.Up("all") },
-		AllDown: func() { _ = u.ctrl.Down("all") },
-		Reload:  func() { _ = u.ctrl.Reload() },
-		Quit:    func() { u.app.Quit() },
+		Open:     func() { fyne.Do(u.dash.show) },
+		Hosts:    func() { fyne.Do(u.dash.openHosts) },
+		Settings: func() { fyne.Do(u.dash.openSettings) },
+		AllUp:    func() { _ = u.ctrl.Up("all") },
+		AllDown:  func() { _ = u.ctrl.Down("all") },
+		Reload:   func() { _ = u.ctrl.Reload() },
+		Quit:     func() { u.app.Quit() },
 		StartDaemon: func() {
 			if err := gui.StartDaemon(); err != nil {
 				u.app.SendNotification(fyne.NewNotification("hopd", err.Error()))

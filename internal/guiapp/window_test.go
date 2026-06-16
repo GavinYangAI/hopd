@@ -79,3 +79,19 @@ func TestDashboard_WithStoreConstructs(t *testing.T) {
 		t.Fatal("store not set")
 	}
 }
+
+func TestDashboard_OpenSettingsAndImportNoPanic(t *testing.T) {
+	app := test.NewApp()
+	defer app.Quit()
+
+	dir := t.TempDir()
+	d := newDashboard(app, &DashboardActions{})
+	d.setStore(gui.NewConfigStore(filepath.Join(dir, "config.yaml"), nil))
+
+	// These open modal dialogs; under the headless driver they must construct
+	// without panicking (no store == nil guard tripping, no missing window).
+	// openImport uses the production readUserSSHConfig, which tolerates a
+	// missing ~/.ssh/config (errMissingSSHConfig -> empty form).
+	d.openSettings()
+	d.openImport()
+}
