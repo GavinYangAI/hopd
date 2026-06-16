@@ -209,7 +209,8 @@ func (d *dashboard) filtered() []ipc.TunnelStatus {
 	var out []ipc.TunnelStatus
 	for _, t := range d.snap {
 		if strings.Contains(t.Name, q) || strings.Contains(t.Group, q) ||
-			strings.Contains(t.Remote, q) || strings.Contains(t.Via, q) {
+			strings.Contains(t.Remote, q) || strings.Contains(t.Via, q) ||
+			strings.Contains(t.ViaHost, q) {
 			out = append(out, t)
 		}
 	}

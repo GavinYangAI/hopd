@@ -53,6 +53,20 @@ func TestHasLegacyTunnels(t *testing.T) {
 	}
 }
 
+func TestFiltered_MatchesViaHost(t *testing.T) {
+	d := &dashboard{
+		snap: []ipc.TunnelStatus{
+			{Name: "pg", Group: "prod", Remote: "10.0.1.5:5432", ViaHost: "entryA"},
+			{Name: "rd", Group: "prod", Remote: "h:6379", ViaHost: "bastionB"},
+		},
+		query: "entryA",
+	}
+	got := d.filtered()
+	if len(got) != 1 || got[0].Name != "pg" {
+		t.Fatalf("filter by via_host: got %+v, want only pg", got)
+	}
+}
+
 func TestDashboard_WithStoreConstructs(t *testing.T) {
 	app := test.NewApp()
 	defer app.Quit()
