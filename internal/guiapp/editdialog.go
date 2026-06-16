@@ -1,9 +1,12 @@
 package guiapp
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -12,6 +15,7 @@ import (
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/GavinYangAI/hopd/internal/config"
 	"github.com/GavinYangAI/hopd/internal/gui"
 )
 
@@ -38,6 +42,13 @@ type editForm struct {
 	migrateBtn  *widget.Button
 	onMigrate   func() error
 	closeDialog func()
+
+	// "测试连接" seams (injectable for tests; defaulted in newEditForm).
+	testBtn      *widget.Button
+	testCfg      func() (*config.Config, error) // provides the config to test against
+	testRunner   gui.CmdRunner                  // ssh runner (defaults to gui.ExecRunner)
+	testConn     func(ctx context.Context, cfg *config.Config, host string, run gui.CmdRunner) gui.TestConnResult
+	onTestResult func(gui.TestConnResult) // result sink (defaults to a dialog)
 
 	route string // gui.RouteViaHost | gui.RouteDirect | gui.RouteRelay | ""
 
@@ -150,6 +161,20 @@ func newEditForm(f gui.TunnelForm, hostNames []string, onNewHost func(after func
 	ef.via.SetText(f.Via)
 	ef.sshOptions.SetText(f.SSHOptions)
 	ef.autostart.SetChecked(f.Autostart)
+
+	ef.testRunner = gui.ExecRunner
+	ef.testConn = gui.TestConnection
+	ef.onTestResult = func(res gui.TestConnResult) {
+		win := currentWindow()
+		if win == nil {
+			return
+		}
+		if res.OK {
+			dialog.ShowInformation("连接成功", "已成功连到所选主机。", win)
+		} else {
+			dialog.ShowError(fmt.Errorf("连接失败：%s", res.Reason), win)
+		}
+	}
 
 	ef.build(f)
 	ef.refresh()
@@ -348,8 +373,13 @@ func (ef *editForm) rebuildExpand() {
 		note := infoNote("选一台已保存的主机；没有就点「+ 新建主机」。")
 		newBtn := widget.NewButtonWithIcon("+ 新建主机", theme.ContentAddIcon(), ef.addNewHost)
 		picker := container.NewBorder(nil, nil, nil, newBtn, ef.viaHostSel)
+		ef.testBtn = widget.NewButtonWithIcon("测试连接", theme.ConfirmIcon(), ef.runTest)
 		ef.expandBox.Objects = []fyne.CanvasObject{
-			expandPanel(container.NewVBox(note, ef.field("主机", true, "选一台已保存的 SSH 主机", "viaHost", picker))),
+			expandPanel(container.NewVBox(
+				note,
+				ef.field("主机", true, "选一台已保存的 SSH 主机", "viaHost", picker),
+				container.NewHBox(ef.testBtn),
+			)),
 		}
 	case gui.RouteDirect:
 		note := infoNote("跳板机（可选）——目标能直接 ssh 就留空；要先过一台跳板才填。")
@@ -481,6 +511,25 @@ func (ef *editForm) doMigrate() {
 	}
 }
 
+// runTest tests the connection to the currently chosen via_host. It builds the
+// config to test against (testCfg), runs gui.TestConnection with the injected
+// runner, and reports via onTestResult.
+func (ef *editForm) runTest() {
+	host := ef.viaHostSel.Selected
+	if host == "" || ef.testCfg == nil {
+		return
+	}
+	cfg, err := ef.testCfg()
+	if err != nil {
+		ef.onTestResult(gui.TestConnResult{Reason: err.Error()})
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	res := ef.testConn(ctx, cfg, host, ef.testRunner)
+	ef.onTestResult(res)
+}
+
 // legacyMigrateBanner is the in-dialog prompt shown over a legacy tunnel's
 // (disabled) fields, with the migrate action.
 func legacyMigrateBanner(btn *widget.Button) fyne.CanvasObject {
@@ -543,10 +592,17 @@ func (ef *editForm) value() gui.TunnelForm {
 }
 
 // showEditDialog presents the guided form modally. hostNames seeds the via_host
-// picker; onNewHost (may be nil) opens the host dialog. onSubmit receives the
-// edited form when the user saves; returning an error keeps the dialog open.
-func showEditDialog(win fyne.Window, title string, initial gui.TunnelForm, hostNames []string, onNewHost func(after func(created string)), onMigrate func() error, onSubmit func(gui.TunnelForm) error) {
+// picker; onNewHost (may be nil) opens the host dialog; onMigrate (may be nil)
+// runs legacy migration; loadCfg (may be nil) provides the config the "测试连接"
+// button tests against. onSubmit receives the edited form when the user saves;
+// returning an error keeps the dialog open.
+func showEditDialog(win fyne.Window, title string, initial gui.TunnelForm, hostNames []string,
+	onNewHost func(after func(created string)), onMigrate func() error,
+	loadCfg func() (*config.Config, error), onSubmit func(gui.TunnelForm) error) {
 	ef := newEditForm(initial, hostNames, onNewHost, onMigrate)
+	if loadCfg != nil {
+		ef.testCfg = loadCfg
+	}
 	dlg := dialog.NewCustomWithoutButtons(title, ef.root, win)
 	dlg.Resize(fyne.NewSize(720, 620))
 	ef.onCancel = dlg.Hide

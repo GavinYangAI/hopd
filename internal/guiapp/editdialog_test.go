@@ -1,12 +1,14 @@
 package guiapp
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/widget"
+	"github.com/GavinYangAI/hopd/internal/config"
 	"github.com/GavinYangAI/hopd/internal/gui"
 )
 
@@ -64,6 +66,37 @@ func TestNewEditForm_ViaHostTunnelIsNotLegacy(t *testing.T) {
 	)
 	if ef.legacy {
 		t.Fatal("a via_host tunnel must not be flagged legacy")
+	}
+}
+
+func TestEditForm_TestConnection_UsesChosenHost(t *testing.T) {
+	_ = test.NewApp()
+	ef := newEditForm(
+		gui.TunnelForm{Name: "pg", LocalPort: "5432", DestHost: "h", DestPort: "5432", ViaHost: "entryA"},
+		[]string{"entryA"}, nil, nil,
+	)
+	ef.testCfg = func() (*config.Config, error) {
+		return config.Parse([]byte(`
+hosts:
+  entryA: {host: 198.51.100.7, port: 65522, user: userA}
+groups:
+  g:
+    - {name: pg, local: "5432", remote: h:5432, via_host: entryA}
+`))
+	}
+	var gotHost string
+	ef.testRunner = func(ctx context.Context, name string, args ...string) ([]byte, []byte, error) {
+		return []byte(""), []byte(""), nil // success
+	}
+	ef.onTestResult = func(res gui.TestConnResult) { /* capture */ }
+	ef.testConn = func(ctx context.Context, cfg *config.Config, host string, run gui.CmdRunner) gui.TestConnResult {
+		gotHost = host
+		return gui.TestConnResult{OK: true}
+	}
+
+	ef.runTest()
+	if gotHost != "entryA" {
+		t.Fatalf("test connection used host %q, want entryA", gotHost)
 	}
 }
 

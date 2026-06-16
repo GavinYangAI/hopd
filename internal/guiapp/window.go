@@ -390,7 +390,7 @@ func (d *dashboard) addTunnel() {
 	if d.store == nil {
 		return
 	}
-	showEditDialog(d.win, "新增隧道", gui.TunnelForm{Autostart: true}, d.hostNames(), d.onNewHost, nil, func(f gui.TunnelForm) error {
+	showEditDialog(d.win, "新增隧道", gui.TunnelForm{Autostart: true}, d.hostNames(), d.onNewHost, nil, d.store.Load, func(f gui.TunnelForm) error {
 		tn, err := f.Parse()
 		if err != nil {
 			return err
@@ -450,7 +450,7 @@ func (d *dashboard) openEditDialog(name string, cur config.Tunnel) {
 		d.openEditDialog(name, cur2)
 		return nil
 	}
-	showEditDialog(d.win, "编辑隧道", gui.ToForm(cur), d.hostNames(), d.onNewHost, migrate, func(f gui.TunnelForm) error {
+	showEditDialog(d.win, "编辑隧道", gui.ToForm(cur), d.hostNames(), d.onNewHost, migrate, d.store.Load, func(f gui.TunnelForm) error {
 		tn, err := f.Parse()
 		if err != nil {
 			return err
