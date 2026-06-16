@@ -29,7 +29,12 @@ type editForm struct {
 	autostart              *widget.Check
 	rawJump                []string
 
-	route string // gui.RouteDirect | gui.RouteRelay | ""
+	viaHostSel  *widget.Select // via_host picker (new model)
+	hostNames   []string       // available saved host names
+	onNewHost   func(after func(created string))
+	viaHostCard *routeCard
+
+	route string // gui.RouteViaHost | gui.RouteDirect | gui.RouteRelay | ""
 
 	// live-refresh targets
 	captions    map[string]*captionLabel
@@ -73,8 +78,10 @@ func (c *captionLabel) set(errMsg, warnMsg string) {
 	c.obj.Refresh()
 }
 
-// newEditForm builds the guided form prefilled from f.
-func newEditForm(f gui.TunnelForm) *editForm {
+// newEditForm builds the guided form prefilled from f. hostNames seeds the
+// via_host picker; onNewHost (may be nil) opens the host dialog and calls back
+// with the created host name so the picker can refresh and select it.
+func newEditForm(f gui.TunnelForm, hostNames []string, onNewHost func(after func(created string))) *editForm {
 	ef := &editForm{
 		name:       widget.NewEntry(),
 		group:      widget.NewEntry(),
@@ -91,6 +98,16 @@ func newEditForm(f gui.TunnelForm) *editForm {
 		rawJump:    f.RawJump,
 		route:      gui.RouteOf(f),
 		captions:   map[string]*captionLabel{},
+		hostNames:  append([]string(nil), hostNames...),
+		onNewHost:  onNewHost,
+	}
+	ef.viaHostSel = widget.NewSelect(ef.hostNames, func(string) { ef.refresh() })
+	// Prefill the selection by direct assignment (not SetSelected) so the
+	// OnChanged callback doesn't fire ef.refresh() before ef.build(f) has created
+	// the preview/caption widgets it touches. ef.build(f)+ef.refresh() below pick
+	// the value up. This mirrors the Entry SetText calls that also precede build.
+	if f.ViaHost != "" {
+		ef.viaHostSel.Selected = f.ViaHost
 	}
 	for _, p := range []struct {
 		e  *widget.Entry
@@ -179,6 +196,11 @@ func (ef *editForm) build(f gui.TunnelForm) {
 	ef.routeErr.obj.Color = pal.err
 	lead := widget.NewLabel("hopd 要先用 SSH 连进去，才能转发端口。下面两种方式很容易搞混——选错了就连不通，按你的情况选一个：")
 	lead.Wrapping = fyne.TextWrapWord
+	ef.viaHostCard = newRouteCard(
+		"用一台已保存的主机", "推荐",
+		"选一台你保存过的 SSH 主机（含端口/用户/密钥/跳板），hopd 登录它再转发端口。无需手改 ~/.ssh/config。",
+		"ssh 主机  → 目标主机:端口",
+		func() { ef.setRoute(gui.RouteViaHost) })
 	ef.directCard = newRouteCard(
 		"目标机器我能 SSH 登录", "经跳板直达",
 		"目标主机自己开放了 SSH。hopd 直接登录它（或先穿过一台跳板再登录），然后转发端口。",
@@ -194,7 +216,7 @@ func (ef *editForm) build(f gui.TunnelForm) {
 		sectionHeader(3, "怎么到达它？", "关键一步"),
 		lead,
 		ef.routeErr.obj,
-		container.NewGridWithColumns(2, ef.directCard.root, ef.relayCard.root),
+		container.NewGridWithColumns(3, ef.viaHostCard.root, ef.directCard.root, ef.relayCard.root),
 		ef.expandBox,
 	)
 
@@ -287,6 +309,7 @@ func (ef *editForm) rebuildAdvanced() {
 
 func (ef *editForm) setRoute(r string) {
 	ef.route = r
+	ef.viaHostCard.setActive(r == gui.RouteViaHost)
 	ef.directCard.setActive(r == gui.RouteDirect)
 	ef.relayCard.setActive(r == gui.RouteRelay)
 	ef.rebuildExpand()
@@ -295,9 +318,17 @@ func (ef *editForm) setRoute(r string) {
 
 // rebuildExpand swaps the fields shown under the route cards.
 func (ef *editForm) rebuildExpand() {
+	ef.viaHostCard.setActive(ef.route == gui.RouteViaHost)
 	ef.directCard.setActive(ef.route == gui.RouteDirect)
 	ef.relayCard.setActive(ef.route == gui.RouteRelay)
 	switch ef.route {
+	case gui.RouteViaHost:
+		note := infoNote("选一台已保存的主机；没有就点「+ 新建主机」。")
+		newBtn := widget.NewButtonWithIcon("+ 新建主机", theme.ContentAddIcon(), ef.addNewHost)
+		picker := container.NewBorder(nil, nil, nil, newBtn, ef.viaHostSel)
+		ef.expandBox.Objects = []fyne.CanvasObject{
+			expandPanel(container.NewVBox(note, ef.field("主机", true, "选一台已保存的 SSH 主机", "viaHost", picker))),
+		}
 	case gui.RouteDirect:
 		note := infoNote("跳板机（可选）——目标能直接 ssh 就留空；要先过一台跳板才填。")
 		keyRow := container.NewBorder(nil, nil, nil,
@@ -368,6 +399,10 @@ func (ef *editForm) valid() bool {
 func (ef *editForm) rebuildPreview(val gui.TunnelForm) {
 	nodes := []fyne.CanvasObject{diagNode("本机", ":"+valueOr(val.LocalPort, "—"), false)}
 	switch ef.route {
+	case gui.RouteViaHost:
+		if val.ViaHost != "" {
+			nodes = append(nodes, arrow(), diagNode("主机", val.ViaHost, true))
+		}
 	case gui.RouteRelay:
 		if val.Via != "" {
 			nodes = append(nodes, arrow(), diagNode("中继", val.Via, true))
@@ -387,6 +422,24 @@ func (ef *editForm) rebuildPreview(val gui.TunnelForm) {
 	nodes = append(nodes, arrow(), diagNode(svc, target, false))
 	ef.previewBox.Objects = nodes
 	ef.previewBox.Refresh()
+}
+
+// addNewHost opens the host dialog (via onNewHost) and, on creation, adds the
+// new host to the picker and selects it.
+func (ef *editForm) addNewHost() {
+	if ef.onNewHost == nil {
+		return
+	}
+	ef.onNewHost(func(created string) {
+		if created == "" {
+			return
+		}
+		ef.hostNames = append(ef.hostNames, created)
+		ef.viaHostSel.Options = ef.hostNames
+		ef.viaHostSel.SetSelected(created)
+		ef.viaHostSel.Refresh()
+		ef.refresh()
+	})
 }
 
 // pickKeyFile opens a file chooser starting at ~/.ssh and fills the key entry.
@@ -423,18 +476,20 @@ func (ef *editForm) value() gui.TunnelForm {
 		JumpUser:   ef.jumpUser.Text,
 		KeyFile:    ef.keyFile.Text,
 		Via:        ef.via.Text,
+		ViaHost:    ef.viaHostSel.Selected,
 		SSHOptions: ef.sshOptions.Text,
 		Autostart:  ef.autostart.Checked,
 		RawJump:    ef.rawJump,
 	}
 }
 
-// showEditDialog presents the guided form modally. onSubmit receives the edited
-// form when the user saves; returning an error keeps the dialog open.
-func showEditDialog(win fyne.Window, title string, initial gui.TunnelForm, onSubmit func(gui.TunnelForm) error) {
-	ef := newEditForm(initial)
+// showEditDialog presents the guided form modally. hostNames seeds the via_host
+// picker; onNewHost (may be nil) opens the host dialog. onSubmit receives the
+// edited form when the user saves; returning an error keeps the dialog open.
+func showEditDialog(win fyne.Window, title string, initial gui.TunnelForm, hostNames []string, onNewHost func(after func(created string)), onSubmit func(gui.TunnelForm) error) {
+	ef := newEditForm(initial, hostNames, onNewHost)
 	dlg := dialog.NewCustomWithoutButtons(title, ef.root, win)
-	dlg.Resize(fyne.NewSize(640, 600))
+	dlg.Resize(fyne.NewSize(720, 620))
 	ef.onCancel = dlg.Hide
 	ef.onSave = func() {
 		if !ef.valid() {

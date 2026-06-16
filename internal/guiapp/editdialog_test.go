@@ -10,6 +10,35 @@ import (
 	"github.com/GavinYangAI/hopd/internal/gui"
 )
 
+func TestNewEditForm_ViaHostPicker_ListsHostsAndValidates(t *testing.T) {
+	_ = test.NewApp()
+	ef := newEditForm(
+		gui.TunnelForm{Name: "pg", LocalPort: "5432", DestHost: "10.0.1.5", DestPort: "5432", ViaHost: "entryA"},
+		[]string{"entryA", "bastionB"},
+		nil,
+	)
+	if ef.viaHostSel == nil {
+		t.Fatal("expected a via_host Select widget")
+	}
+	if len(ef.viaHostSel.Options) != 2 || ef.viaHostSel.Options[0] != "entryA" {
+		t.Fatalf("picker options = %v, want [entryA bastionB]", ef.viaHostSel.Options)
+	}
+	if ef.viaHostSel.Selected != "entryA" {
+		t.Fatalf("picker should preselect the form's ViaHost, got %q", ef.viaHostSel.Selected)
+	}
+	if !ef.valid() {
+		t.Fatal("a complete via_host form should be valid")
+	}
+}
+
+func TestNewEditForm_NewBlank_DefaultsToViaHostRoute(t *testing.T) {
+	_ = test.NewApp()
+	ef := newEditForm(gui.TunnelForm{}, []string{"entryA"}, nil)
+	if ef.route != gui.RouteViaHost {
+		t.Fatalf("new blank form route = %q, want %q", ef.route, gui.RouteViaHost)
+	}
+}
+
 func TestNewEditForm_PrefillsAndReads(t *testing.T) {
 	_ = test.NewApp()
 
@@ -19,7 +48,7 @@ func TestNewEditForm_PrefillsAndReads(t *testing.T) {
 		JumpUser: "root", JumpHost: "198.51.100.20", JumpPort: "65532",
 		KeyFile: "~/.ssh/id_rsa",
 	}
-	ef := newEditForm(initial)
+	ef := newEditForm(initial, nil, nil)
 
 	got := ef.value()
 	// RawJump isn't an input widget; compare the visible fields.
@@ -33,11 +62,11 @@ func TestNewEditForm_CarriesAutostart(t *testing.T) {
 	_ = test.NewApp()
 	ef := newEditForm(gui.TunnelForm{
 		Name: "a", LocalPort: "1", DestHost: "h", DestPort: "2", Autostart: true,
-	})
+	}, nil, nil)
 	if !ef.value().Autostart {
 		t.Fatal("autostart checkbox should round-trip through the form")
 	}
-	ef2 := newEditForm(gui.TunnelForm{Name: "b", LocalPort: "2", DestHost: "h", DestPort: "3"})
+	ef2 := newEditForm(gui.TunnelForm{Name: "b", LocalPort: "2", DestHost: "h", DestPort: "3"}, nil, nil)
 	if ef2.value().Autostart {
 		t.Fatal("autostart should default to false when the tunnel is not marked")
 	}
@@ -49,7 +78,7 @@ func TestNewEditForm_PreservesRawJump(t *testing.T) {
 		Name: "a", LocalPort: "1", DestHost: "h", DestPort: "2",
 		RawJump: []string{"a@h1:22", "b@h2:22"},
 	}
-	ef := newEditForm(initial)
+	ef := newEditForm(initial, nil, nil)
 	if got := ef.value(); len(got.RawJump) != 2 || got.RawJump[0] != "a@h1:22" {
 		t.Fatalf("RawJump not carried through the form: %v", got.RawJump)
 	}
@@ -57,7 +86,7 @@ func TestNewEditForm_PreservesRawJump(t *testing.T) {
 
 func TestNewEditForm_EntriesDoNotTrapScroll(t *testing.T) {
 	_ = test.NewApp()
-	ef := newEditForm(gui.TunnelForm{})
+	ef := newEditForm(gui.TunnelForm{}, nil, nil)
 	// Single-line entries must have wrapping off and scrolling none, otherwise
 	// widget.Entry's internal Scroll swallows wheel events and the form can't
 	// scroll while the pointer is over a field.

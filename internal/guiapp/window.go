@@ -341,11 +341,34 @@ func (d *dashboard) actionReload() error {
 // setStore wires the config store used by Add/Edit/Delete.
 func (d *dashboard) setStore(s *gui.ConfigStore) { d.store = s }
 
+// hostNames returns the saved host names for the via_host picker (empty on load
+// error so the dialog still opens).
+func (d *dashboard) hostNames() []string {
+	cfg, err := d.store.Load()
+	if err != nil {
+		return nil
+	}
+	names := make([]string, 0, len(cfg.Hosts()))
+	for name := range cfg.Hosts() {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// onNewHost opens the host dialog and reports the created host name back to the
+// form via after(). It reuses the Plan-2 host dialog; the dialog's onDone does
+// not carry the created name, so we refresh the picker options (after("")) and
+// let the user pick the newly added host.
+func (d *dashboard) onNewHost(after func(created string)) {
+	showHostDialog(d.win, d.store, gui.HostForm{}, "", func() { after("") })
+}
+
 func (d *dashboard) addTunnel() {
 	if d.store == nil {
 		return
 	}
-	showEditDialog(d.win, "新增隧道", gui.TunnelForm{Autostart: true}, func(f gui.TunnelForm) error {
+	showEditDialog(d.win, "新增隧道", gui.TunnelForm{Autostart: true}, d.hostNames(), d.onNewHost, func(f gui.TunnelForm) error {
 		tn, err := f.Parse()
 		if err != nil {
 			return err
@@ -376,7 +399,7 @@ func (d *dashboard) editTunnel() {
 		return
 	}
 	oldName := d.selName
-	showEditDialog(d.win, "编辑隧道", gui.ToForm(cur), func(f gui.TunnelForm) error {
+	showEditDialog(d.win, "编辑隧道", gui.ToForm(cur), d.hostNames(), d.onNewHost, func(f gui.TunnelForm) error {
 		tn, err := f.Parse()
 		if err != nil {
 			return err
