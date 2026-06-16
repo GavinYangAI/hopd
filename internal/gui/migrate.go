@@ -2,6 +2,7 @@ package gui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/GavinYangAI/hopd/internal/config"
@@ -142,7 +143,76 @@ func slug(s string) string {
 	return strings.Trim(b.String(), "-")
 }
 
-// migrateJump is implemented in Task 5.
+// migrateJump handles an inline `jump:` chain. It builds one host per hop plus
+// an endpoint host for the tunnel's own SSH target (the forward dest host, which
+// legacy inline-jump ssh-es into directly), linking endpoint -> hop1 -> ... ->
+// hopN. The tunnel's ViaHost becomes the endpoint host.
 func migrateJump(cfg *config.Config, t config.Tunnel) (string, error) {
-	return "", fmt.Errorf("inline-jump migration not yet implemented")
+	destHost, _ := splitHostPort(t.Remote)
+	if destHost == "" {
+		return "", fmt.Errorf("tunnel %q: cannot determine SSH endpoint from remote %q", t.Name, t.Remote)
+	}
+
+	// Name and reserve every host up front so later AddHosts can't collide.
+	endpointName := uniqueHostName(cfg, slug(destHost)+"-entry")
+	endpoint := config.Host{Host: destHost, Port: 22}
+	if err := cfg.AddHost(endpointName, endpoint); err != nil {
+		return "", err
+	}
+
+	// Build hop hosts in order; link each to the next via Jump.
+	hopNames := make([]string, len(t.Jump))
+	hops := make([]config.Host, len(t.Jump))
+	for i, raw := range t.Jump {
+		user, hostport := splitJumpUser(raw)
+		host, portStr := splitHostPort(hostport)
+		port := 22
+		if portStr != "" {
+			if n, err := strconv.Atoi(portStr); err == nil {
+				port = n
+			}
+		}
+		hopNames[i] = uniqueHostName(cfg, host)
+		hops[i] = config.Host{Host: host, Port: port, User: user}
+		// Reserve the name immediately so the next iteration's uniqueHostName
+		// sees it as taken.
+		if err := cfg.AddHost(hopNames[i], hops[i]); err != nil {
+			return "", err
+		}
+	}
+	// Link the chain: endpoint -> hop0 -> hop1 -> ... (now that names are stable).
+	for i := range hopNames {
+		next := ""
+		if i+1 < len(hopNames) {
+			next = hopNames[i+1]
+		}
+		h := hops[i]
+		h.Jump = next
+		if err := cfg.UpdateHost(hopNames[i], h); err != nil {
+			return "", err
+		}
+	}
+	if len(hopNames) > 0 {
+		endpoint.Jump = hopNames[0]
+		if err := cfg.UpdateHost(endpointName, endpoint); err != nil {
+			return "", err
+		}
+	}
+
+	t.Via = ""
+	t.Jump = nil
+	t.ViaHost = endpointName
+	if err := cfg.UpdateTunnel(t.Name, t); err != nil {
+		return "", err
+	}
+	return endpointName, nil
+}
+
+// splitHostPort splits "host:port" into (host, port); with no ':' the port is
+// empty. The last ':' is used so IPv6-free host:port forms work.
+func splitHostPort(s string) (host, port string) {
+	if i := strings.LastIndex(s, ":"); i >= 0 {
+		return s[:i], s[i+1:]
+	}
+	return s, ""
 }

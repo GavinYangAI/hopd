@@ -107,3 +107,65 @@ groups:
 		t.Fatalf("expected an error naming the missing alias, got %v", err)
 	}
 }
+
+func TestMigrateLegacyTunnel_InlineJump_SingleHop(t *testing.T) {
+	cfg := parseCfg(t, `
+groups:
+  g:
+    - {name: rdp, local: "13389", remote: 203.0.113.10:3389, jump: ["root@198.51.100.20:65532"]}
+`)
+	newHost, err := MigrateLegacyTunnel(cfg, "rdp", func() ([]byte, error) { return nil, nil })
+	if err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	tn, _ := cfg.Tunnel("rdp")
+	if tn.ViaHost != newHost || len(tn.Jump) != 0 {
+		t.Fatalf("tunnel not rewritten: %+v (newHost=%q)", tn, newHost)
+	}
+
+	// Endpoint host = the tunnel's SSH target (the forward dest host).
+	endpoint, ok := cfg.Host(newHost)
+	if !ok || endpoint.Host != "203.0.113.10" || endpoint.Port != 22 {
+		t.Fatalf("endpoint host mismatch: %+v (ok=%v)", endpoint, ok)
+	}
+	// One jump hop host capturing user/host/port.
+	hop, ok := cfg.Host(endpoint.Jump)
+	if !ok || hop.Host != "198.51.100.20" || hop.Port != 65532 || hop.User != "root" {
+		t.Fatalf("hop host mismatch: %+v (ok=%v, jump=%q)", hop, ok, endpoint.Jump)
+	}
+	if hop.Jump != "" {
+		t.Fatalf("single hop should have empty jump, got %q", hop.Jump)
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("migrated config invalid: %v", err)
+	}
+}
+
+func TestMigrateLegacyTunnel_InlineJump_MultiHop(t *testing.T) {
+	cfg := parseCfg(t, `
+groups:
+  g:
+    - {name: t1, local: "1", remote: 10.0.0.9:5432, jump: ["a@h1:22", "b@h2:2200"]}
+`)
+	newHost, err := MigrateLegacyTunnel(cfg, "t1", func() ([]byte, error) { return nil, nil })
+	if err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	endpoint, _ := cfg.Host(newHost)
+	// endpoint -> h1 -> h2 -> ""
+	h1, _ := cfg.Host(endpoint.Jump)
+	if h1.Host != "h1" || h1.User != "a" || h1.Port != 22 {
+		t.Fatalf("first hop mismatch: %+v", h1)
+	}
+	h2, _ := cfg.Host(h1.Jump)
+	if h2.Host != "h2" || h2.User != "b" || h2.Port != 2200 {
+		t.Fatalf("second hop mismatch: %+v", h2)
+	}
+	if h2.Jump != "" {
+		t.Fatalf("last hop should have empty jump, got %q", h2.Jump)
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("migrated config invalid: %v", err)
+	}
+}
