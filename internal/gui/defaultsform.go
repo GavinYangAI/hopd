@@ -63,4 +63,24 @@ func parseOptionLines(text string) (map[string]string, error) {
 	return opts, nil
 }
 
-var _ = time.Second // keep time imported for Apply (Task 5)
+// Apply parses the form and writes it into cfg: restart bounds and
+// defaults.ssh_options. It returns a friendly error on bad input and does not
+// mutate cfg on failure (durations are parsed before anything is written).
+func (f DefaultsForm) Apply(cfg *config.Config) error {
+	min, err := time.ParseDuration(strings.TrimSpace(f.RestartMin))
+	if err != nil {
+		return fmt.Errorf("重连最短间隔不是有效时长（如 2s、500ms）：%v", err)
+	}
+	max, err := time.ParseDuration(strings.TrimSpace(f.RestartMax))
+	if err != nil {
+		return fmt.Errorf("重连最长间隔不是有效时长（如 60s、2m）：%v", err)
+	}
+	opts, err := parseOptionLines(f.SSHOptions)
+	if err != nil {
+		return err
+	}
+	cfg.Restart.Min = min
+	cfg.Restart.Max = max
+	cfg.SetDefaultOptions(opts)
+	return nil
+}
