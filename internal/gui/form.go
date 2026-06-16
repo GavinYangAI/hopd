@@ -25,6 +25,7 @@ type TunnelForm struct {
 	KeyFile  string
 
 	Via        string
+	ViaHost    string // name of a config Host entry (new model); wins over Via/Jump
 	SSHOptions string // multiline key=value, excluding IdentityFile
 
 	// Autostart brings this tunnel up automatically when the daemon starts.
@@ -44,10 +45,15 @@ func (f TunnelForm) Parse() (config.Tunnel, error) {
 		Local:     strings.TrimSpace(f.LocalPort),
 		Remote:    strings.TrimSpace(f.DestHost) + ":" + strings.TrimSpace(f.DestPort),
 		Via:       strings.TrimSpace(f.Via),
+		ViaHost:   strings.TrimSpace(f.ViaHost),
 		Autostart: f.Autostart,
 	}
 
 	switch {
+	case t.ViaHost != "":
+		// New model: via_host wins. Drop any legacy via/jump entirely.
+		t.Via = ""
+		t.Jump = nil
 	case t.Via != "":
 		// via wins; no inline jump.
 	case strings.TrimSpace(f.JumpHost) != "":
@@ -105,6 +111,7 @@ func ToForm(t config.Tunnel) TunnelForm {
 		Group:     t.Group,
 		LocalPort: t.Local,
 		Via:       t.Via,
+		ViaHost:   t.ViaHost,
 		Autostart: t.Autostart,
 	}
 	if i := strings.LastIndex(t.Remote, ":"); i >= 0 {

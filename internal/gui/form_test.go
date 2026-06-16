@@ -181,3 +181,55 @@ func TestToForm_ViaTunnel(t *testing.T) {
 		t.Fatalf("via round trip differs:\n a=%+v\n b=%+v", tn, back)
 	}
 }
+
+func TestTunnelForm_Parse_ViaHost(t *testing.T) {
+	f := TunnelForm{
+		Name: "pg", Group: "prod", LocalPort: "5432",
+		DestHost: "10.0.1.5", DestPort: "5432",
+		ViaHost: "entryA",
+	}
+	tn, err := f.Parse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tn.ViaHost != "entryA" {
+		t.Fatalf("ViaHost = %q, want entryA", tn.ViaHost)
+	}
+	if tn.Remote != "10.0.1.5:5432" {
+		t.Fatalf("remote = %q", tn.Remote)
+	}
+	if tn.Via != "" || len(tn.Jump) != 0 {
+		t.Fatalf("via_host set: legacy via/jump must be empty, got via=%q jump=%v", tn.Via, tn.Jump)
+	}
+}
+
+func TestTunnelForm_Parse_ViaHostWinsOverLegacyFields(t *testing.T) {
+	// If a form somehow carries both, via_host wins and legacy is dropped.
+	f := TunnelForm{
+		Name: "pg", LocalPort: "5432", DestHost: "h", DestPort: "5432",
+		ViaHost: "entryA", Via: "stalealias", JumpHost: "ignored", JumpUser: "x",
+		RawJump: []string{"a@h1:22"},
+	}
+	tn, _ := f.Parse()
+	if tn.ViaHost != "entryA" || tn.Via != "" || len(tn.Jump) != 0 {
+		t.Fatalf("expected via_host-only tunnel, got %+v", tn)
+	}
+}
+
+func TestToForm_ViaHostRoundTrip(t *testing.T) {
+	tn := config.Tunnel{
+		Name: "pg", Group: "prod", Local: "5432", Remote: "10.0.1.5:5432",
+		ViaHost: "entryA",
+	}
+	f := ToForm(tn)
+	if f.ViaHost != "entryA" || f.DestHost != "10.0.1.5" || f.DestPort != "5432" {
+		t.Fatalf("ToForm via_host wrong: %+v", f)
+	}
+	back, err := f.Parse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(back, tn) {
+		t.Fatalf("via_host round trip differs:\n a=%+v\n b=%+v", tn, back)
+	}
+}
