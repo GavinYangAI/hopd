@@ -201,3 +201,50 @@ groups:
 		t.Fatalf("restart = %+v, want 2s..60s", cfg.Restart)
 	}
 }
+
+func TestDefaultOptionsGetSet(t *testing.T) {
+	cfg, err := Parse([]byte(`
+defaults:
+  ssh_options: {ServerAliveInterval: "15"}
+groups:
+  g:
+    - {name: t1, local: "5432", remote: x:5432, via: alias}
+`))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+
+	// Getter returns a copy of the parsed defaults.
+	got := cfg.DefaultOptions()
+	if got["ServerAliveInterval"] != "15" {
+		t.Fatalf("DefaultOptions = %v, want ServerAliveInterval=15", got)
+	}
+	// Mutating the returned map must not affect the config.
+	got["ServerAliveInterval"] = "999"
+	if again := cfg.DefaultOptions(); again["ServerAliveInterval"] != "15" {
+		t.Fatalf("DefaultOptions returned a live reference, got mutated %v", again)
+	}
+
+	// Setter replaces the whole map and round-trips through Marshal/Parse.
+	cfg.SetDefaultOptions(map[string]string{"Compression": "yes", "ConnectTimeout": "5"})
+	out, err := Marshal(cfg)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	cfg2, err := Parse(out)
+	if err != nil {
+		t.Fatalf("reparse: %v\n%s", err, out)
+	}
+	rt := cfg2.DefaultOptions()
+	if rt["Compression"] != "yes" || rt["ConnectTimeout"] != "5" {
+		t.Fatalf("round-trip defaults = %v, want Compression=yes ConnectTimeout=5", rt)
+	}
+	if _, gone := rt["ServerAliveInterval"]; gone {
+		t.Fatalf("SetDefaultOptions should replace, not merge; got stale key in %v", rt)
+	}
+	// Setting empty/nil clears the section.
+	cfg2.SetDefaultOptions(nil)
+	if len(cfg2.DefaultOptions()) != 0 {
+		t.Fatalf("SetDefaultOptions(nil) should clear, got %v", cfg2.DefaultOptions())
+	}
+}

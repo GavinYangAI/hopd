@@ -189,6 +189,31 @@ func (c *Config) Hosts() map[string]Host {
 	return out
 }
 
+// DefaultOptions returns a copy of defaults.ssh_options. Mutating the returned
+// map does not affect the config — use SetDefaultOptions to change it.
+func (c *Config) DefaultOptions() map[string]string {
+	out := make(map[string]string, len(c.defaultOpts))
+	for k, v := range c.defaultOpts {
+		out[k] = v
+	}
+	return out
+}
+
+// SetDefaultOptions replaces defaults.ssh_options with a copy of m (nil/empty
+// clears the section). It stores into the same unexported field Marshal reads,
+// so the change round-trips through Marshal/Parse.
+func (c *Config) SetDefaultOptions(m map[string]string) {
+	if len(m) == 0 {
+		c.defaultOpts = map[string]string{}
+		return
+	}
+	cp := make(map[string]string, len(m))
+	for k, v := range m {
+		cp[k] = v
+	}
+	c.defaultOpts = cp
+}
+
 // nodeMapToStrings renders YAML scalar values (int/bool/string) as strings,
 // so ssh -o options keep their literal form (e.g. yes -> "yes", 15 -> "15").
 func nodeMapToStrings(m map[string]yaml.Node) map[string]string {
