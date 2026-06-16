@@ -6,6 +6,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 	"github.com/GavinYangAI/hopd/internal/config"
 	"github.com/GavinYangAI/hopd/internal/gui"
@@ -117,4 +118,68 @@ func (f *importForm) selectedNames() []string {
 		}
 	}
 	return out
+}
+
+// apply builds config.Hosts from the checked rows, adds any that don't already
+// exist, and saves through the store. Existing hosts are skipped (their rows are
+// disabled, but apply also guards in case state changed). It returns the store's
+// error (including gui.ErrReloadAfterSave, which the dialog treats as soft).
+func (f *importForm) apply(store *gui.ConfigStore) error {
+	selected := f.selectedNames()
+	if len(selected) == 0 {
+		return nil
+	}
+	hosts, err := gui.BuildHostsFromImport(importedSlice(f), selected)
+	if err != nil {
+		return err
+	}
+	cfg, err := store.Load()
+	if err != nil {
+		return err
+	}
+	for name, h := range hosts {
+		if _, exists := cfg.Host(name); exists {
+			continue // skip duplicates defensively
+		}
+		if err := cfg.AddHost(name, h); err != nil {
+			return err
+		}
+	}
+	return store.Save(cfg)
+}
+
+// importedSlice rebuilds the []sshconf.ImportedHost from the rows so apply can
+// call the pure model with the same data the dialog rendered.
+func importedSlice(f *importForm) []sshconf.ImportedHost {
+	out := make([]sshconf.ImportedHost, 0, len(f.rows))
+	for _, name := range f.orderedNames() {
+		out = append(out, f.rows[name].host)
+	}
+	return out
+}
+
+// showImportDialog presents the import wizard modally. On "导入所选" it applies
+// the selection through the store and closes; a soft reload failure is shown as
+// an information dialog, consistent with the tunnel dialog.
+func showImportDialog(win fyne.Window, cfg *config.Config, store *gui.ConfigStore) {
+	f, err := newImportForm(cfg, readUserSSHConfig)
+	if err != nil {
+		dialog.ShowError(err, win)
+		return
+	}
+	dlg := dialog.NewCustomConfirm("从 ~/.ssh/config 导入", "导入所选", "取消", f.root, func(ok bool) {
+		if !ok {
+			return
+		}
+		if err := f.apply(store); err != nil {
+			if errors.Is(err, gui.ErrReloadAfterSave) {
+				dialog.ShowInformation("已导入", "主机已保存。daemon 未运行，将在它启动后生效。", win)
+				return
+			}
+			dialog.ShowError(err, win)
+			return
+		}
+	}, win)
+	dlg.Resize(fyne.NewSize(560, 460))
+	dlg.Show()
 }

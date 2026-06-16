@@ -1,10 +1,12 @@
 package guiapp
 
 import (
+	"path/filepath"
 	"testing"
 
 	"fyne.io/fyne/v2/test"
 	"github.com/GavinYangAI/hopd/internal/config"
+	"github.com/GavinYangAI/hopd/internal/gui"
 )
 
 const fixtureSSHConfig = `
@@ -84,5 +86,69 @@ func TestImportForm_EmptyWhenNoFile(t *testing.T) {
 	}
 	if len(f.rows) != 0 {
 		t.Fatalf("want 0 rows for missing file, got %d", len(f.rows))
+	}
+}
+
+func TestImportForm_ApplyAddsHostsAndSaves(t *testing.T) {
+	_ = test.NewApp()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	store := gui.NewConfigStore(path, nil) // nil reload => Save won't fail on daemon
+
+	cfg, _ := config.Parse([]byte(`groups: {}`))
+	f, _ := newImportForm(cfg, func() ([]byte, error) { return []byte(fixtureSSHConfig), nil })
+
+	// Select both so the entryA->bastionB jump is preserved.
+	f.rows["entryA"].check.SetChecked(true)
+	f.rows["bastionB"].check.SetChecked(true)
+
+	if err := f.apply(store); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+
+	reloaded, err := store.Load()
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	a, ok := reloaded.Host("entryA")
+	if !ok || a.Port != 65522 || a.User != "userA" || a.Key != "~/.ssh/idA" || a.Jump != "bastionB" {
+		t.Fatalf("entryA not imported correctly: %+v (ok=%v)", a, ok)
+	}
+	b, ok := reloaded.Host("bastionB")
+	if !ok || b.Host != "203.0.113.9" || b.Port != 22 {
+		t.Fatalf("bastionB not imported correctly: %+v (ok=%v)", b, ok)
+	}
+}
+
+func TestImportForm_ApplySkipsAlreadyExisting(t *testing.T) {
+	_ = test.NewApp()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	// Pre-seed a config that already has bastionB.
+	seed := gui.NewConfigStore(path, nil)
+	base, _ := config.Parse([]byte(`
+hosts:
+  bastionB: {host: 203.0.113.9, user: userB}
+groups: {}
+`))
+	if err := seed.Save(base); err != nil {
+		t.Fatalf("seed save: %v", err)
+	}
+
+	cfg, _ := seed.Load()
+	f, _ := newImportForm(cfg, func() ([]byte, error) { return []byte(fixtureSSHConfig), nil })
+	// bastionB's checkbox is disabled (pre-existing); only entryA is selectable.
+	f.rows["entryA"].check.SetChecked(true)
+
+	if err := f.apply(seed); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	reloaded, _ := seed.Load()
+	a, ok := reloaded.Host("entryA")
+	if !ok {
+		t.Fatal("entryA should have been imported")
+	}
+	if a.Jump != "" {
+		t.Fatalf("entryA.Jump = %q, want empty (bastionB not in this selection)", a.Jump)
 	}
 }
