@@ -84,3 +84,35 @@ func (f DefaultsForm) Apply(cfg *config.Config) error {
 	cfg.SetDefaultOptions(opts)
 	return nil
 }
+
+// CheckDefaults validates the defaults form field-by-field and returns per-field
+// messages (keys: restartMin, restartMax, sshOptions). It is pure so the dialog
+// can call it live on every keystroke. An absent key means that field is valid.
+func CheckDefaults(f DefaultsForm) FieldErrors {
+	errs := FieldErrors{}
+
+	min, minErr := time.ParseDuration(strings.TrimSpace(f.RestartMin))
+	switch {
+	case strings.TrimSpace(f.RestartMin) == "":
+		errs["restartMin"] = "填重连最短间隔（如 2s）"
+	case minErr != nil:
+		errs["restartMin"] = "不是有效时长（如 2s、500ms）"
+	case min <= 0:
+		errs["restartMin"] = "要大于 0"
+	}
+
+	max, maxErr := time.ParseDuration(strings.TrimSpace(f.RestartMax))
+	switch {
+	case strings.TrimSpace(f.RestartMax) == "":
+		errs["restartMax"] = "填重连最长间隔（如 60s）"
+	case maxErr != nil:
+		errs["restartMax"] = "不是有效时长（如 60s、2m）"
+	case minErr == nil && max < min:
+		errs["restartMax"] = "最长间隔要 ≥ 最短间隔"
+	}
+
+	if _, err := parseOptionLines(f.SSHOptions); err != nil {
+		errs["sshOptions"] = err.Error()
+	}
+	return errs
+}

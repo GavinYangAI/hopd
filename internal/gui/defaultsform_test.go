@@ -88,3 +88,62 @@ groups: {}
 		t.Fatalf("empty ssh_options text should clear defaults, got %v", cfg.DefaultOptions())
 	}
 }
+
+func TestCheckDefaults(t *testing.T) {
+	cases := []struct {
+		name     string
+		form     DefaultsForm
+		wantKeys []string // field keys expected to carry an error ("" entries impossible)
+	}{
+		{
+			name: "all valid",
+			form: DefaultsForm{RestartMin: "2s", RestartMax: "60s", SSHOptions: "Compression=yes"},
+		},
+		{
+			name:     "empty min",
+			form:     DefaultsForm{RestartMin: "", RestartMax: "60s"},
+			wantKeys: []string{"restartMin"},
+		},
+		{
+			name:     "bad max duration",
+			form:     DefaultsForm{RestartMin: "2s", RestartMax: "later"},
+			wantKeys: []string{"restartMax"},
+		},
+		{
+			name:     "max less than min",
+			form:     DefaultsForm{RestartMin: "60s", RestartMax: "2s"},
+			wantKeys: []string{"restartMax"},
+		},
+		{
+			name:     "zero min",
+			form:     DefaultsForm{RestartMin: "0s", RestartMax: "60s"},
+			wantKeys: []string{"restartMin"},
+		},
+		{
+			name:     "bad ssh option line",
+			form:     DefaultsForm{RestartMin: "2s", RestartMax: "60s", SSHOptions: "noequals"},
+			wantKeys: []string{"sshOptions"},
+		},
+		{
+			name:     "dash p in ssh options",
+			form:     DefaultsForm{RestartMin: "2s", RestartMax: "60s", SSHOptions: "-p=2222"},
+			wantKeys: []string{"sshOptions"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			errs := CheckDefaults(tc.form)
+			if len(tc.wantKeys) == 0 {
+				if len(errs) != 0 {
+					t.Fatalf("want no errors, got %v", errs)
+				}
+				return
+			}
+			for _, k := range tc.wantKeys {
+				if errs[k] == "" {
+					t.Fatalf("want error on %q, got %v", k, errs)
+				}
+			}
+		})
+	}
+}
