@@ -161,6 +161,9 @@ func (c *Config) AddHost(name string, h Host) error {
 	if _, ok := c.hosts[name]; ok {
 		return fmt.Errorf("host %q already exists", name)
 	}
+	if h.Port == 0 {
+		h.Port = 22
+	}
 	c.hosts[name] = h
 	return nil
 }
@@ -169,6 +172,9 @@ func (c *Config) AddHost(name string, h Host) error {
 func (c *Config) UpdateHost(name string, h Host) error {
 	if _, ok := c.hosts[name]; !ok {
 		return fmt.Errorf("host %q not found", name)
+	}
+	if h.Port == 0 {
+		h.Port = 22
 	}
 	c.hosts[name] = h
 	return nil

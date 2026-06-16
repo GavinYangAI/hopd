@@ -190,6 +190,38 @@ groups:
 	}
 }
 
+func TestAddHostNormalizesPortZero(t *testing.T) {
+	cfg, err := Parse([]byte(`
+groups:
+  g:
+    - {name: t1, local: "5432", remote: x:5432, via_host: x}
+`))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	// A host added with Port 0 (e.g. from an ssh_config alias with no Port)
+	// must be normalized to 22 so Validate() passes.
+	if err := cfg.AddHost("x", Host{Host: "h"}); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	if h, _ := cfg.Host("x"); h.Port != 22 {
+		t.Fatalf("AddHost Port=0 should normalize to 22, got %d", h.Port)
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("validate after AddHost(Port 0): %v", err)
+	}
+	// UpdateHost must normalize too.
+	if err := cfg.UpdateHost("x", Host{Host: "h2"}); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if h, _ := cfg.Host("x"); h.Port != 22 {
+		t.Fatalf("UpdateHost Port=0 should normalize to 22, got %d", h.Port)
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("validate after UpdateHost(Port 0): %v", err)
+	}
+}
+
 func countSub(s, sub string) int {
 	n := 0
 	for i := 0; i+len(sub) <= len(s); i++ {
