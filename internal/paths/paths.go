@@ -26,3 +26,6 @@ func SocketPath() string { return filepath.Join(ConfigDir(), "hopd.sock") }
 
 // ControlDir holds ssh ControlMaster sockets.
 func ControlDir() string { return filepath.Join(ConfigDir(), "cm") }
+
+// GeneratedDir holds hopd-generated ssh config files (ssh -F targets).
+func GeneratedDir() string { return filepath.Join(ConfigDir(), "generated") }

@@ -18,3 +18,11 @@ func TestPaths_HonorXDG(t *testing.T) {
 		t.Fatalf("ControlDir() = %q, want %q", got, want)
 	}
 }
+
+func TestGeneratedDir(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "/tmp/xdg")
+	want := filepath.Join("/tmp/xdg", "hopd", "generated")
+	if got := GeneratedDir(); got != want {
+		t.Fatalf("GeneratedDir = %q, want %q", got, want)
+	}
+}
