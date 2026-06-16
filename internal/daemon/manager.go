@@ -3,11 +3,15 @@ package daemon
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"sync"
 
 	"github.com/GavinYangAI/hopd/internal/config"
 	"github.com/GavinYangAI/hopd/internal/ipc"
+	"github.com/GavinYangAI/hopd/internal/paths"
+	"github.com/GavinYangAI/hopd/internal/sshconf"
 	"github.com/GavinYangAI/hopd/internal/tunnel"
 )
 
@@ -15,19 +19,56 @@ import (
 type Manager struct {
 	mu      sync.Mutex
 	sshPath string
+	genDir  string
 	cfg     *config.Config
 	runners map[string]*tunnel.Runner
 	order   []string // config order, for stable Status output
 }
 
-// NewManager builds runners (all DOWN) for every tunnel in cfg.
+// NewManager builds runners (all DOWN) for every tunnel in cfg, writing any
+// generated ssh -F configs under paths.GeneratedDir().
 func NewManager(sshPath string, cfg *config.Config) *Manager {
-	m := &Manager{sshPath: sshPath, cfg: cfg, runners: map[string]*tunnel.Runner{}}
+	return NewManagerWithGenDir(sshPath, cfg, paths.GeneratedDir())
+}
+
+// NewManagerWithGenDir is NewManager with an explicit generated-config dir (for
+// tests).
+func NewManagerWithGenDir(sshPath string, cfg *config.Config, genDir string) *Manager {
+	m := &Manager{sshPath: sshPath, genDir: genDir, cfg: cfg, runners: map[string]*tunnel.Runner{}}
 	for _, t := range cfg.Tunnels() {
-		m.runners[t.Name] = tunnel.NewRunner(t, sshPath, cfg.Restart.Min, cfg.Restart.Max)
+		m.runners[t.Name] = m.buildRunner(cfg, t)
 		m.order = append(m.order, t.Name)
 	}
 	return m
+}
+
+// buildRunner creates a runner for t and, when t uses via_host, writes its
+// generated ssh config and attaches it. A generation/write failure is left to
+// surface at connect time (the runner falls back to legacy argv, which will
+// fail clearly) rather than aborting manager construction.
+func (m *Manager) buildRunner(cfg *config.Config, t config.Tunnel) *tunnel.Runner {
+	r := tunnel.NewRunner(t, m.sshPath, cfg.Restart.Min, cfg.Restart.Max)
+	text, entry, err := sshconf.Generate(cfg, t)
+	if err == nil && text != "" {
+		path := filepath.Join(m.genDir, t.Name+".sshcfg")
+		if writeErr := writeGenerated(path, text); writeErr == nil {
+			r.SetSSHConfig(path, entry)
+		}
+	}
+	return r
+}
+
+// writeGenerated writes the generated ssh config atomically with 0600 perms,
+// creating the parent dir (0700) if needed.
+func writeGenerated(path, text string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, []byte(text), 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }
 
 // StartAutostart brings up every tunnel marked autostart in config. The daemon

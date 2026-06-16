@@ -3,6 +3,7 @@ package daemon
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -171,5 +172,35 @@ func TestManager_LogsUnknown(t *testing.T) {
 	defer m.StopAll()
 	if _, err := m.Logs("nope"); err == nil {
 		t.Fatalf("Logs(nope) should error")
+	}
+}
+
+func TestManagerWritesGeneratedConfig(t *testing.T) {
+	dir := t.TempDir()
+	cfg, err := config.Parse([]byte(`
+hosts:
+  entryA:
+    host: 198.51.100.7
+    port: 65522
+    user: userA
+groups:
+  prod:
+    - name: pg
+      local: "5432"
+      remote: 10.0.1.5:5432
+      via_host: entryA
+`))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	m := NewManagerWithGenDir("/usr/bin/ssh", cfg, dir)
+	_ = m
+	want := filepath.Join(dir, "pg.sshcfg")
+	data, err := os.ReadFile(want)
+	if err != nil {
+		t.Fatalf("expected generated config at %s: %v", want, err)
+	}
+	if !strings.Contains(string(data), "Host entryA") || !strings.Contains(string(data), "Port 65522") {
+		t.Fatalf("generated config missing host block:\n%s", data)
 	}
 }
