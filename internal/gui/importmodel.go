@@ -42,6 +42,26 @@ func BuildHostsFromImport(imported []sshconf.ImportedHost, selectedNames []strin
 	return out, nil
 }
 
+// DroppedJumps reports, for each selected ImportedHost that had a ProxyJump,
+// the jump target that will be dropped because it is not itself selected. The
+// returned map is alias -> dropped jump target. Useful for a wizard warning.
+func DroppedJumps(imported []sshconf.ImportedHost, selectedNames []string) map[string]string {
+	selected := make(map[string]bool, len(selectedNames))
+	for _, n := range selectedNames {
+		selected[n] = true
+	}
+	dropped := map[string]string{}
+	for _, ih := range imported {
+		if !selected[ih.Name] || ih.ProxyJump == "" {
+			continue
+		}
+		if !selected[ih.ProxyJump] {
+			dropped[ih.Name] = ih.ProxyJump
+		}
+	}
+	return dropped
+}
+
 // ExistingImportNames reports which imported aliases already exist as hosts in
 // cfg, so the wizard can pre-mark/skip duplicates.
 func ExistingImportNames(cfg *config.Config, imported []sshconf.ImportedHost) map[string]bool {

@@ -97,3 +97,21 @@ groups:
 		t.Fatalf("entryA should not be flagged (not in config)")
 	}
 }
+
+func TestDroppedJumps(t *testing.T) {
+	// entryA -> bastionB (not selected); lonely -> missing (not in import).
+	dropped := DroppedJumps(sampleImported(), []string{"entryA", "lonely"})
+	want := map[string]string{
+		"entryA": "bastionB",
+		"lonely": "missing",
+	}
+	if !reflect.DeepEqual(dropped, want) {
+		t.Fatalf("got %+v\nwant %+v", dropped, want)
+	}
+
+	// When the jump target is also selected, nothing is dropped.
+	none := DroppedJumps(sampleImported(), []string{"entryA", "bastionB"})
+	if len(none) != 0 {
+		t.Fatalf("want no dropped jumps, got %+v", none)
+	}
+}
