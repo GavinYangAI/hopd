@@ -28,6 +28,7 @@ type TunnelStatus struct {
 	Local      string `json:"local"`
 	Remote     string `json:"remote"`
 	Via        string `json:"via,omitempty"`
+	ViaHost    string `json:"via_host,omitempty"`
 	UptimeSec  int64  `json:"uptime_sec"`
 	Reconnects int    `json:"reconnects"`
 	LastError  string `json:"last_error,omitempty"`
