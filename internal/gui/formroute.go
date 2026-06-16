@@ -76,6 +76,10 @@ func CheckRoute(route string, f TunnelForm) (errs, warns FieldErrors) {
 		} else if len(f.RawJump) > 0 {
 			warns["jumpHost"] = "已保留原有的多级跳板链。"
 		}
+	case RouteViaHost:
+		if strings.TrimSpace(f.ViaHost) == "" {
+			errs["viaHost"] = "选择一台主机，或新建一台"
+		}
 	default:
 		errs["route"] = "先选一种到达方式"
 	}

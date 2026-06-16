@@ -25,3 +25,30 @@ func TestRouteOf_NewBlankDefaultsToViaHost(t *testing.T) {
 		t.Fatalf("blank form route = %q, want %q (new tunnels default to host model)", got, RouteViaHost)
 	}
 }
+
+func TestCheckRoute_ViaHost_RequiresChosenHost(t *testing.T) {
+	f := TunnelForm{Name: "pg", LocalPort: "5432", DestHost: "h", DestPort: "5432"} // no ViaHost
+	errs, _ := CheckRoute(RouteViaHost, f)
+	if errs["viaHost"] == "" {
+		t.Fatalf("expected a viaHost error when no host chosen, got %v", errs)
+	}
+}
+
+func TestCheckRoute_ViaHost_OK(t *testing.T) {
+	f := TunnelForm{Name: "pg", LocalPort: "5432", DestHost: "h", DestPort: "5432", ViaHost: "entryA"}
+	errs, _ := CheckRoute(RouteViaHost, f)
+	if len(errs) != 0 {
+		t.Fatalf("expected no errors for a complete via_host form, got %v", errs)
+	}
+}
+
+func TestCheckRoute_ViaHost_StillChecksCommonFields(t *testing.T) {
+	// A chosen host doesn't excuse missing name/localPort/destHost/destPort.
+	f := TunnelForm{ViaHost: "entryA"}
+	errs, _ := CheckRoute(RouteViaHost, f)
+	for _, key := range []string{"name", "localPort", "destHost", "destPort"} {
+		if errs[key] == "" {
+			t.Fatalf("expected error on %q for an otherwise-empty via_host form, got %v", key, errs)
+		}
+	}
+}
