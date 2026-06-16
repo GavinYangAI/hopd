@@ -122,30 +122,37 @@ func (f *importForm) selectedNames() []string {
 
 // apply builds config.Hosts from the checked rows, adds any that don't already
 // exist, and saves through the store. Existing hosts are skipped (their rows are
-// disabled, but apply also guards in case state changed). It returns the store's
-// error (including gui.ErrReloadAfterSave, which the dialog treats as soft).
-func (f *importForm) apply(store *gui.ConfigStore) error {
+// disabled, but apply also guards in case state changed). It returns the number
+// of hosts actually imported and the store's error (including
+// gui.ErrReloadAfterSave, which the dialog treats as soft — the count is still
+// returned in that case so callers can report it).
+func (f *importForm) apply(store *gui.ConfigStore) (int, error) {
 	selected := f.selectedNames()
 	if len(selected) == 0 {
-		return nil
+		return 0, nil
 	}
 	hosts, err := gui.BuildHostsFromImport(importedSlice(f), selected)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	cfg, err := store.Load()
 	if err != nil {
-		return err
+		return 0, err
 	}
+	added := 0
 	for name, h := range hosts {
 		if _, exists := cfg.Host(name); exists {
 			continue // skip duplicates defensively
 		}
 		if err := cfg.AddHost(name, h); err != nil {
-			return err
+			return 0, err
 		}
+		added++
 	}
-	return store.Save(cfg)
+	if added == 0 {
+		return 0, nil
+	}
+	return added, store.Save(cfg)
 }
 
 // importedSlice rebuilds the []sshconf.ImportedHost from the rows so apply can
@@ -159,9 +166,11 @@ func importedSlice(f *importForm) []sshconf.ImportedHost {
 }
 
 // showImportDialog presents the import wizard modally. On "导入所选" it applies
-// the selection through the store and closes; a soft reload failure is shown as
-// an information dialog, consistent with the tunnel dialog.
-func showImportDialog(win fyne.Window, cfg *config.Config, store *gui.ConfigStore) {
+// the selection through the store and closes; on success it confirms how many
+// hosts were imported and calls onDone (if set) so an open hosts window can
+// refresh. A soft reload failure is shown as an information dialog, consistent
+// with the tunnel dialog.
+func showImportDialog(win fyne.Window, cfg *config.Config, store *gui.ConfigStore, onDone func()) {
 	f, err := newImportForm(cfg, readUserSSHConfig)
 	if err != nil {
 		dialog.ShowError(err, win)
@@ -171,15 +180,28 @@ func showImportDialog(win fyne.Window, cfg *config.Config, store *gui.ConfigStor
 		if !ok {
 			return
 		}
-		if err := f.apply(store); err != nil {
+		n, err := f.apply(store)
+		if err != nil {
 			if errors.Is(err, gui.ErrReloadAfterSave) {
-				dialog.ShowInformation("已导入", "主机已保存。daemon 未运行，将在它启动后生效。", win)
+				// Saved, but the daemon couldn't be told to reload — still a success.
+				call(onDone)
+				dialog.ShowInformation("已导入", importedMsg(n)+" daemon 未运行，将在它启动后生效。", win)
 				return
 			}
 			dialog.ShowError(err, win)
 			return
 		}
+		call(onDone)
+		dialog.ShowInformation("已导入", importedMsg(n), win)
 	}, win)
 	dlg.Resize(fyne.NewSize(560, 460))
 	dlg.Show()
+}
+
+// importedMsg renders the success confirmation for n imported hosts.
+func importedMsg(n int) string {
+	if n == 0 {
+		return "没有选择要导入的主机。"
+	}
+	return "已导入 " + itoa(n) + " 台主机。"
 }

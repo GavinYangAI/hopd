@@ -102,8 +102,12 @@ func TestImportForm_ApplyAddsHostsAndSaves(t *testing.T) {
 	f.rows["entryA"].check.SetChecked(true)
 	f.rows["bastionB"].check.SetChecked(true)
 
-	if err := f.apply(store); err != nil {
+	n, err := f.apply(store)
+	if err != nil {
 		t.Fatalf("apply: %v", err)
+	}
+	if n != 2 {
+		t.Fatalf("apply imported count = %d, want 2", n)
 	}
 
 	reloaded, err := store.Load()
@@ -140,8 +144,12 @@ groups: {}
 	// bastionB's checkbox is disabled (pre-existing); only entryA is selectable.
 	f.rows["entryA"].check.SetChecked(true)
 
-	if err := f.apply(seed); err != nil {
+	n, err := f.apply(seed)
+	if err != nil {
 		t.Fatalf("apply: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("apply imported count = %d, want 1 (only entryA)", n)
 	}
 	reloaded, _ := seed.Load()
 	a, ok := reloaded.Host("entryA")

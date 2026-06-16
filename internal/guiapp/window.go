@@ -415,7 +415,7 @@ func (d *dashboard) openImport() {
 		dialog.ShowError(err, d.win)
 		return
 	}
-	showImportDialog(d.win, cfg, d.store)
+	showImportDialog(d.win, cfg, d.store, d.refreshHosts)
 }
 
 // hostNames returns the saved host names for the via_host picker (empty on load
