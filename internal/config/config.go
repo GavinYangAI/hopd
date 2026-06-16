@@ -25,14 +25,27 @@ type Tunnel struct {
 	Remote     string            // host:port
 	Via        string            // ssh config Host alias (optional)
 	Jump       []string          // inline -J chain (optional)
+	ViaHost    string            // name of a Host entry (new model)
 	SSHOptions map[string]string // merged defaults + per-tunnel
 	Autostart  bool              // bring this tunnel up when the daemon starts
+}
+
+// Host is a reusable SSH endpoint: connection params for one hop. Tunnels
+// reference an entry host by name via Tunnel.ViaHost; hosts chain via Jump.
+type Host struct {
+	Host       string            // hostname / IP (ssh HostName)
+	Port       int               // ssh Port (defaults to 22 when omitted)
+	User       string            // ssh User
+	Key        string            // IdentityFile path; "" => ssh-agent / defaults
+	Jump       string            // name of another Host entry; "" => none
+	SSHOptions map[string]string // extra per-host -o options
 }
 
 // Config is the parsed configuration.
 type Config struct {
 	Restart     Restart
-	tunnels     []Tunnel // ordered as parsed
+	hosts       map[string]Host // reusable SSH endpoints
+	tunnels     []Tunnel        // ordered as parsed
 	byName      map[string]int
 	defaultOpts map[string]string // defaults.ssh_options, retained for Marshal
 }
@@ -46,7 +59,17 @@ type rawConfig struct {
 			Max string `yaml:"max"`
 		} `yaml:"restart"`
 	} `yaml:"defaults"`
+	Hosts  map[string]rawHost     `yaml:"hosts"`
 	Groups map[string][]rawTunnel `yaml:"groups"`
+}
+
+type rawHost struct {
+	Host       string               `yaml:"host"`
+	Port       int                  `yaml:"port"`
+	User       string               `yaml:"user"`
+	Key        string               `yaml:"key"`
+	Jump       string               `yaml:"jump"`
+	SSHOptions map[string]yaml.Node `yaml:"ssh_options"`
 }
 
 type rawTunnel struct {
@@ -55,6 +78,7 @@ type rawTunnel struct {
 	Remote     string               `yaml:"remote"`
 	Via        string               `yaml:"via"`
 	Jump       []string             `yaml:"jump"`
+	ViaHost    string               `yaml:"via_host"`
 	SSHOptions map[string]yaml.Node `yaml:"ssh_options"`
 	Autostart  bool                 `yaml:"autostart"`
 }
@@ -89,6 +113,22 @@ func Parse(data []byte) (*Config, error) {
 	defOpts := nodeMapToStrings(raw.Defaults.SSHOptions)
 	cfg.defaultOpts = defOpts
 
+	cfg.hosts = map[string]Host{}
+	for name, rh := range raw.Hosts {
+		port := rh.Port
+		if port == 0 {
+			port = 22
+		}
+		cfg.hosts[name] = Host{
+			Host:       rh.Host,
+			Port:       port,
+			User:       rh.User,
+			Key:        rh.Key,
+			Jump:       rh.Jump,
+			SSHOptions: nodeMapToStrings(rh.SSHOptions),
+		}
+	}
+
 	groupNames := make([]string, 0, len(raw.Groups))
 	for g := range raw.Groups {
 		groupNames = append(groupNames, g)
@@ -111,6 +151,7 @@ func Parse(data []byte) (*Config, error) {
 				Remote:     rt.Remote,
 				Via:        rt.Via,
 				Jump:       rt.Jump,
+				ViaHost:    rt.ViaHost,
 				SSHOptions: opts,
 				Autostart:  rt.Autostart,
 			}
@@ -131,6 +172,21 @@ func (c *Config) Tunnel(name string) (Tunnel, bool) {
 		return Tunnel{}, false
 	}
 	return c.tunnels[i], true
+}
+
+// Host looks up a reusable host by name.
+func (c *Config) Host(name string) (Host, bool) {
+	h, ok := c.hosts[name]
+	return h, ok
+}
+
+// Hosts returns a copy of the host map.
+func (c *Config) Hosts() map[string]Host {
+	out := make(map[string]Host, len(c.hosts))
+	for k, v := range c.hosts {
+		out[k] = v
+	}
+	return out
 }
 
 // nodeMapToStrings renders YAML scalar values (int/bool/string) as strings,

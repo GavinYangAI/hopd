@@ -5,6 +5,45 @@ import (
 	"time"
 )
 
+func TestParseHosts(t *testing.T) {
+	data := []byte(`
+hosts:
+  bastionB:
+    host: 203.0.113.9
+    user: userB
+  entryA:
+    host: 198.51.100.7
+    port: 65522
+    user: userA
+    key: ~/.ssh/idA
+    jump: bastionB
+groups:
+  prod:
+    - name: pg
+      local: "5432"
+      remote: 10.0.1.5:5432
+      via_host: entryA
+`)
+	cfg, err := Parse(data)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	a, ok := cfg.Host("entryA")
+	if !ok {
+		t.Fatal("entryA not found")
+	}
+	if a.Host != "198.51.100.7" || a.Port != 65522 || a.User != "userA" || a.Key != "~/.ssh/idA" || a.Jump != "bastionB" {
+		t.Fatalf("entryA mismatch: %+v", a)
+	}
+	b, ok := cfg.Host("bastionB")
+	if !ok {
+		t.Fatal("bastionB not found")
+	}
+	if b.Port != 22 { // default applied
+		t.Fatalf("bastionB default port = %d, want 22", b.Port)
+	}
+}
+
 func TestParseYAML_Autostart(t *testing.T) {
 	src := `
 groups:
