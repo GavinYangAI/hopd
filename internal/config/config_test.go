@@ -105,6 +105,28 @@ groups:
 `,
 			want: "unknown host",
 		},
+		{
+			name: "empty host map key",
+			yaml: `
+hosts:
+  "": {host: h1}
+groups:
+  g:
+    - {name: t1, local: "5432", remote: x:5432, via: legacyalias}
+`,
+			want: "empty",
+		},
+		{
+			name: "empty host HostName",
+			yaml: `
+hosts:
+  a: {host: ""}
+groups:
+  g:
+    - {name: t1, local: "5432", remote: x:5432, via_host: a}
+`,
+			want: "host",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

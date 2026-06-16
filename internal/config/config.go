@@ -274,6 +274,12 @@ func (c *Config) Validate() error {
 	}
 
 	for name, h := range c.hosts {
+		if name == "" {
+			return fmt.Errorf("host has empty name")
+		}
+		if h.Host == "" {
+			return fmt.Errorf("host %q: host (HostName) is required", name)
+		}
 		if h.Port < 1 || h.Port > 65535 {
 			return fmt.Errorf("host %q: invalid port %d", name, h.Port)
 		}
