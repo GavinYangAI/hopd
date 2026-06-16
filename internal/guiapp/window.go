@@ -3,6 +3,8 @@ package guiapp
 import (
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -12,9 +14,29 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/GavinYangAI/hopd/internal/config"
 	"github.com/GavinYangAI/hopd/internal/gui"
 	"github.com/GavinYangAI/hopd/internal/ipc"
 )
+
+// errMissingSSHConfig is returned by readUserSSHConfig when ~/.ssh/config does
+// not exist. It is the single source of truth for the migration import path
+// (Plan 4 reuses it; do not redefine).
+var errMissingSSHConfig = errors.New("~/.ssh/config not found")
+
+// readUserSSHConfig reads ~/.ssh/config for the legacy-migration import. It is
+// the only place that file is read. A missing file maps to errMissingSSHConfig.
+func readUserSSHConfig() ([]byte, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(filepath.Join(home, ".ssh", "config"))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, errMissingSSHConfig
+	}
+	return data, err
+}
 
 // DashboardActions are the controller hooks the window invokes for the selected
 // tunnel. Any may be nil (used by the construction smoke test).
@@ -368,7 +390,7 @@ func (d *dashboard) addTunnel() {
 	if d.store == nil {
 		return
 	}
-	showEditDialog(d.win, "新增隧道", gui.TunnelForm{Autostart: true}, d.hostNames(), d.onNewHost, func(f gui.TunnelForm) error {
+	showEditDialog(d.win, "新增隧道", gui.TunnelForm{Autostart: true}, d.hostNames(), d.onNewHost, nil, func(f gui.TunnelForm) error {
 		tn, err := f.Parse()
 		if err != nil {
 			return err
@@ -398,8 +420,37 @@ func (d *dashboard) editTunnel() {
 		dialog.ShowError(fmt.Errorf("tunnel %q not found", d.selName), d.win)
 		return
 	}
-	oldName := d.selName
-	showEditDialog(d.win, "编辑隧道", gui.ToForm(cur), d.hostNames(), d.onNewHost, func(f gui.TunnelForm) error {
+	d.openEditDialog(d.selName, cur)
+}
+
+// openEditDialog shows the editor for an existing tunnel cur (named name),
+// wiring host list, new-host, migrate and save. Migration of a legacy tunnel
+// rewrites it into the via_host model, saves, then reopens this dialog on the
+// migrated tunnel.
+func (d *dashboard) openEditDialog(name string, cur config.Tunnel) {
+	migrate := func() error {
+		cfg, err := d.store.Load()
+		if err != nil {
+			return err
+		}
+		if _, err := gui.MigrateLegacyTunnel(cfg, name, readUserSSHConfig); err != nil {
+			return err
+		}
+		if err := d.store.Save(cfg); err != nil && !errors.Is(err, gui.ErrReloadAfterSave) {
+			return err
+		}
+		fresh, err := d.store.Load()
+		if err != nil {
+			return err
+		}
+		cur2, ok := fresh.Tunnel(name)
+		if !ok {
+			return fmt.Errorf("tunnel %q vanished after migration", name)
+		}
+		d.openEditDialog(name, cur2)
+		return nil
+	}
+	showEditDialog(d.win, "编辑隧道", gui.ToForm(cur), d.hostNames(), d.onNewHost, migrate, func(f gui.TunnelForm) error {
 		tn, err := f.Parse()
 		if err != nil {
 			return err
@@ -408,7 +459,7 @@ func (d *dashboard) editTunnel() {
 		if err != nil {
 			return err
 		}
-		if err := c.UpdateTunnel(oldName, tn); err != nil {
+		if err := c.UpdateTunnel(name, tn); err != nil {
 			return err
 		}
 		return d.store.Save(c)

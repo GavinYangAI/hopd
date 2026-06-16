@@ -15,7 +15,7 @@ func TestNewEditForm_ViaHostPicker_ListsHostsAndValidates(t *testing.T) {
 	ef := newEditForm(
 		gui.TunnelForm{Name: "pg", LocalPort: "5432", DestHost: "10.0.1.5", DestPort: "5432", ViaHost: "entryA"},
 		[]string{"entryA", "bastionB"},
-		nil,
+		nil, nil,
 	)
 	if ef.viaHostSel == nil {
 		t.Fatal("expected a via_host Select widget")
@@ -33,9 +33,37 @@ func TestNewEditForm_ViaHostPicker_ListsHostsAndValidates(t *testing.T) {
 
 func TestNewEditForm_NewBlank_DefaultsToViaHostRoute(t *testing.T) {
 	_ = test.NewApp()
-	ef := newEditForm(gui.TunnelForm{}, []string{"entryA"}, nil)
+	ef := newEditForm(gui.TunnelForm{}, []string{"entryA"}, nil, nil)
 	if ef.route != gui.RouteViaHost {
 		t.Fatalf("new blank form route = %q, want %q", ef.route, gui.RouteViaHost)
+	}
+}
+
+func TestNewEditForm_LegacyTunnelIsReadMostly(t *testing.T) {
+	_ = test.NewApp()
+	ef := newEditForm(
+		gui.TunnelForm{Name: "old", LocalPort: "1", DestHost: "h", DestPort: "2", Via: "bastion"},
+		[]string{"entryA"}, nil, nil,
+	)
+	if !ef.legacy {
+		t.Fatal("a via/jump tunnel should be detected as legacy")
+	}
+	if !ef.via.Disabled() {
+		t.Fatal("legacy via entry should be disabled in read-mostly mode")
+	}
+	if ef.migrateBtn == nil {
+		t.Fatal("expected a 迁移为主机 button for a legacy tunnel")
+	}
+}
+
+func TestNewEditForm_ViaHostTunnelIsNotLegacy(t *testing.T) {
+	_ = test.NewApp()
+	ef := newEditForm(
+		gui.TunnelForm{Name: "pg", LocalPort: "5432", DestHost: "h", DestPort: "5432", ViaHost: "entryA"},
+		[]string{"entryA"}, nil, nil,
+	)
+	if ef.legacy {
+		t.Fatal("a via_host tunnel must not be flagged legacy")
 	}
 }
 
@@ -48,7 +76,7 @@ func TestNewEditForm_PrefillsAndReads(t *testing.T) {
 		JumpUser: "root", JumpHost: "198.51.100.20", JumpPort: "65532",
 		KeyFile: "~/.ssh/id_rsa",
 	}
-	ef := newEditForm(initial, nil, nil)
+	ef := newEditForm(initial, nil, nil, nil)
 
 	got := ef.value()
 	// RawJump isn't an input widget; compare the visible fields.
@@ -62,11 +90,11 @@ func TestNewEditForm_CarriesAutostart(t *testing.T) {
 	_ = test.NewApp()
 	ef := newEditForm(gui.TunnelForm{
 		Name: "a", LocalPort: "1", DestHost: "h", DestPort: "2", Autostart: true,
-	}, nil, nil)
+	}, nil, nil, nil)
 	if !ef.value().Autostart {
 		t.Fatal("autostart checkbox should round-trip through the form")
 	}
-	ef2 := newEditForm(gui.TunnelForm{Name: "b", LocalPort: "2", DestHost: "h", DestPort: "3"}, nil, nil)
+	ef2 := newEditForm(gui.TunnelForm{Name: "b", LocalPort: "2", DestHost: "h", DestPort: "3"}, nil, nil, nil)
 	if ef2.value().Autostart {
 		t.Fatal("autostart should default to false when the tunnel is not marked")
 	}
@@ -78,7 +106,7 @@ func TestNewEditForm_PreservesRawJump(t *testing.T) {
 		Name: "a", LocalPort: "1", DestHost: "h", DestPort: "2",
 		RawJump: []string{"a@h1:22", "b@h2:22"},
 	}
-	ef := newEditForm(initial, nil, nil)
+	ef := newEditForm(initial, nil, nil, nil)
 	if got := ef.value(); len(got.RawJump) != 2 || got.RawJump[0] != "a@h1:22" {
 		t.Fatalf("RawJump not carried through the form: %v", got.RawJump)
 	}
@@ -86,7 +114,7 @@ func TestNewEditForm_PreservesRawJump(t *testing.T) {
 
 func TestNewEditForm_EntriesDoNotTrapScroll(t *testing.T) {
 	_ = test.NewApp()
-	ef := newEditForm(gui.TunnelForm{}, nil, nil)
+	ef := newEditForm(gui.TunnelForm{}, nil, nil, nil)
 	// Single-line entries must have wrapping off and scrolling none, otherwise
 	// widget.Entry's internal Scroll swallows wheel events and the form can't
 	// scroll while the pointer is over a field.

@@ -34,6 +34,11 @@ type editForm struct {
 	onNewHost   func(after func(created string))
 	viaHostCard *routeCard
 
+	legacy      bool // editing a via/jump tunnel (read-mostly)
+	migrateBtn  *widget.Button
+	onMigrate   func() error
+	closeDialog func()
+
 	route string // gui.RouteViaHost | gui.RouteDirect | gui.RouteRelay | ""
 
 	// live-refresh targets
@@ -81,7 +86,7 @@ func (c *captionLabel) set(errMsg, warnMsg string) {
 // newEditForm builds the guided form prefilled from f. hostNames seeds the
 // via_host picker; onNewHost (may be nil) opens the host dialog and calls back
 // with the created host name so the picker can refresh and select it.
-func newEditForm(f gui.TunnelForm, hostNames []string, onNewHost func(after func(created string))) *editForm {
+func newEditForm(f gui.TunnelForm, hostNames []string, onNewHost func(after func(created string)), onMigrate func() error) *editForm {
 	ef := &editForm{
 		name:       widget.NewEntry(),
 		group:      widget.NewEntry(),
@@ -100,7 +105,9 @@ func newEditForm(f gui.TunnelForm, hostNames []string, onNewHost func(after func
 		captions:   map[string]*captionLabel{},
 		hostNames:  append([]string(nil), hostNames...),
 		onNewHost:  onNewHost,
+		onMigrate:  onMigrate,
 	}
+	ef.legacy = ef.route == gui.RouteRelay || ef.route == gui.RouteDirect
 	ef.viaHostSel = widget.NewSelect(ef.hostNames, func(string) { ef.refresh() })
 	// Prefill the selection by direct assignment (not SetSelected) so the
 	// OnChanged callback doesn't fire ef.refresh() before ef.build(f) has created
@@ -253,6 +260,21 @@ func (ef *editForm) build(f gui.TunnelForm) {
 	)
 
 	ef.rebuildExpand()
+
+	if ef.legacy {
+		for _, e := range []*widget.Entry{ef.via, ef.jumpHost, ef.jumpPort, ef.jumpUser, ef.keyFile} {
+			e.Disable()
+		}
+		ef.viaHostCard.disable()
+		ef.directCard.disable()
+		ef.relayCard.disable()
+		ef.migrateBtn = widget.NewButtonWithIcon("迁移为主机", theme.ContentCopyIcon(), func() { ef.doMigrate() })
+		ef.migrateBtn.Importance = widget.HighImportance
+		banner := legacyMigrateBanner(ef.migrateBtn)
+		ef.expandBox.Objects = append([]fyne.CanvasObject{banner}, ef.expandBox.Objects...)
+		ef.expandBox.Refresh()
+	}
+
 	ef.root = container.NewBorder(headerArea, footer, nil, nil, bodyScroll)
 
 	// live validation on every change
@@ -442,6 +464,43 @@ func (ef *editForm) addNewHost() {
 	})
 }
 
+// doMigrate runs the injected migration (which saves + reopens). On success it
+// closes this dialog; the window adapter reopens on the migrated tunnel.
+func (ef *editForm) doMigrate() {
+	if ef.onMigrate == nil {
+		return
+	}
+	if err := ef.onMigrate(); err != nil {
+		if win := currentWindow(); win != nil {
+			dialog.ShowError(err, win)
+		}
+		return
+	}
+	if ef.closeDialog != nil {
+		ef.closeDialog()
+	}
+}
+
+// legacyMigrateBanner is the in-dialog prompt shown over a legacy tunnel's
+// (disabled) fields, with the migrate action.
+func legacyMigrateBanner(btn *widget.Button) fyne.CanvasObject {
+	msg := widget.NewLabel("这是一条旧式隧道（via/jump）。仍可运行，但建议迁移成「已保存的主机」，以便填写端口/用户/密钥并复用。")
+	msg.Wrapping = fyne.TextWrapWord
+	bg := roundRect(pal.warnSoft, 10, 1, pal.warnEdge)
+	body := container.NewBorder(nil, nil, nil, btn, msg)
+	return container.NewStack(bg, container.New(layoutPadXY{px: 12, py: 10}, body))
+}
+
+// currentWindow returns the last open Fyne window (for showing dialogs from the
+// form, which doesn't hold a window reference).
+func currentWindow() fyne.Window {
+	wins := fyne.CurrentApp().Driver().AllWindows()
+	if len(wins) == 0 {
+		return nil
+	}
+	return wins[len(wins)-1]
+}
+
 // pickKeyFile opens a file chooser starting at ~/.ssh and fills the key entry.
 func (ef *editForm) pickKeyFile() {
 	win := fyne.CurrentApp().Driver().AllWindows()
@@ -486,11 +545,12 @@ func (ef *editForm) value() gui.TunnelForm {
 // showEditDialog presents the guided form modally. hostNames seeds the via_host
 // picker; onNewHost (may be nil) opens the host dialog. onSubmit receives the
 // edited form when the user saves; returning an error keeps the dialog open.
-func showEditDialog(win fyne.Window, title string, initial gui.TunnelForm, hostNames []string, onNewHost func(after func(created string)), onSubmit func(gui.TunnelForm) error) {
-	ef := newEditForm(initial, hostNames, onNewHost)
+func showEditDialog(win fyne.Window, title string, initial gui.TunnelForm, hostNames []string, onNewHost func(after func(created string)), onMigrate func() error, onSubmit func(gui.TunnelForm) error) {
+	ef := newEditForm(initial, hostNames, onNewHost, onMigrate)
 	dlg := dialog.NewCustomWithoutButtons(title, ef.root, win)
 	dlg.Resize(fyne.NewSize(720, 620))
 	ef.onCancel = dlg.Hide
+	ef.closeDialog = dlg.Hide
 	ef.onSave = func() {
 		if !ef.valid() {
 			ef.refresh()
@@ -560,6 +620,17 @@ func (rc *routeCard) setActive(on bool) {
 		rc.radio.FillColor = transparent
 		rc.radio.StrokeColor = pal.text3
 	}
+	rc.bg.Refresh()
+	rc.radio.Refresh()
+}
+
+// disable greys a card so it can't be tapped (used in legacy read-mostly mode).
+func (rc *routeCard) disable() {
+	rc.bg.FillColor = pal.surface2
+	rc.bg.StrokeColor = pal.border
+	rc.bg.StrokeWidth = 1
+	rc.radio.FillColor = transparent
+	rc.radio.StrokeColor = pal.text3
 	rc.bg.Refresh()
 	rc.radio.Refresh()
 }
