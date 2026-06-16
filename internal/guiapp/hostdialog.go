@@ -360,7 +360,3 @@ func runHostTest(win fyne.Window, store *gui.ConfigStore, f gui.HostForm) {
 
 // ensure config import is used even if a future edit removes the only reference.
 var _ = config.Host{}
-
-// showTestConnDialog is a temporary stub replaced by the real implementation in
-// Task 8 (testconndialog.go).
-func showTestConnDialog(fyne.Window, string, gui.TestConnResult) {}
