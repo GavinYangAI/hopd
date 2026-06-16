@@ -48,6 +48,7 @@ type dashboard struct {
 	selLabel  *canvas.Text
 	startStop *widget.Button
 	rowBtns   []*widget.Button // per-selection action buttons to enable/disable
+	hostsWin  fyne.Window      // lazily-created hosts manager window
 }
 
 // newDashboard builds the (hidden) detail window.
@@ -409,7 +410,7 @@ func (d *dashboard) deleteTunnel() {
 			return
 		}
 		if err := d.store.Save(cfg); err != nil {
-			if errors.Is(err, gui.ErrReloadAfterSave) {
+			if isReloadWarning(err) {
 				dialog.ShowInformation("已删除", "配置已保存。daemon 未运行，将在它启动后生效。", d.win)
 			} else {
 				dialog.ShowError(err, d.win)
@@ -417,6 +418,10 @@ func (d *dashboard) deleteTunnel() {
 		}
 	}, d.win)
 }
+
+// isReloadWarning reports whether err is the soft "saved but daemon reload
+// failed" warning (config is on disk; not a real failure).
+func isReloadWarning(err error) bool { return errors.Is(err, gui.ErrReloadAfterSave) }
 
 func (d *dashboard) run(fn func() error) {
 	if err := fn(); err != nil {
