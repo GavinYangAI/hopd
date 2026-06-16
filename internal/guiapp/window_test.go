@@ -36,6 +36,23 @@ func TestFmtDuration(t *testing.T) {
 	}
 }
 
+func TestHasLegacyTunnels(t *testing.T) {
+	if hasLegacyTunnels(nil) {
+		t.Fatal("nil snapshot has no legacy tunnels")
+	}
+	snap := []ipc.TunnelStatus{
+		{Name: "a", ViaHost: "entryA"},
+		{Name: "b", Via: "bastion"},
+	}
+	if !hasLegacyTunnels(snap) {
+		t.Fatal("a tunnel with Via should count as legacy")
+	}
+	only := []ipc.TunnelStatus{{Name: "a", ViaHost: "entryA"}}
+	if hasLegacyTunnels(only) {
+		t.Fatal("via_host-only snapshot is not legacy")
+	}
+}
+
 func TestDashboard_WithStoreConstructs(t *testing.T) {
 	app := test.NewApp()
 	defer app.Quit()

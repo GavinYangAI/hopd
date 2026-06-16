@@ -185,6 +185,9 @@ func (d *dashboard) refreshBody() {
 	}
 
 	var objs []fyne.CanvasObject
+	if hasLegacyTunnels(d.snap) && !d.app.Preferences().Bool(legacyHintDismissedKey) {
+		objs = append(objs, d.legacyHintBanner())
+	}
 	for _, g := range groupOrder(filtered) {
 		objs = append(objs, groupHeader(g, countInGroup(filtered, g)))
 		for _, t := range filtered {
@@ -211,6 +214,34 @@ func (d *dashboard) filtered() []ipc.TunnelStatus {
 		}
 	}
 	return out
+}
+
+const legacyHintDismissedKey = "legacyMigrateHintDismissed"
+
+// hasLegacyTunnels reports whether any tunnel in the snapshot still uses the
+// legacy via alias (the migrate-hint trigger).
+func hasLegacyTunnels(snap []ipc.TunnelStatus) bool {
+	for _, t := range snap {
+		if strings.TrimSpace(t.Via) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// legacyHintBanner is the dismissible one-time prompt shown above the card list
+// when legacy via tunnels exist. Dismissal is persisted in Preferences.
+func (d *dashboard) legacyHintBanner() fyne.CanvasObject {
+	msg := text("有旧式隧道（via）。在「编辑」里可一键「迁移为主机」，以便填端口/用户/密钥并复用。", 12.5, pal.text1, fyne.TextStyle{})
+	dismiss := widget.NewButtonWithIcon("", theme.CancelIcon(), func() {
+		d.app.Preferences().SetBool(legacyHintDismissedKey, true)
+		d.refreshBody()
+	})
+	dismiss.Importance = widget.LowImportance
+	bg := roundRect(pal.warnSoft, 10, 1, pal.warnEdge)
+	body := container.NewBorder(nil, nil, nil, dismiss, msg)
+	return container.New(layoutPadXY{px: 14, py: 8},
+		container.NewStack(bg, container.New(layoutPadXY{px: 12, py: 9}, body)))
 }
 
 func (d *dashboard) selectTunnel(name string) {
