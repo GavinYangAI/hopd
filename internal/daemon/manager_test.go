@@ -204,3 +204,55 @@ groups:
 		t.Fatalf("generated config missing host block:\n%s", data)
 	}
 }
+
+func TestReloadRegeneratesOnHostChange(t *testing.T) {
+	dir := t.TempDir()
+	cfg1, _ := config.Parse([]byte(`
+hosts:
+  entryA: {host: 198.51.100.7, port: 65522, user: userA}
+groups:
+  prod:
+    - {name: pg, local: "5432", remote: 10.0.1.5:5432, via_host: entryA}
+`))
+	m := NewManagerWithGenDir("/usr/bin/ssh", cfg1, dir)
+
+	cfg2, _ := config.Parse([]byte(`
+hosts:
+  entryA: {host: 198.51.100.7, port: 2222, user: userA}
+groups:
+  prod:
+    - {name: pg, local: "5432", remote: 10.0.1.5:5432, via_host: entryA}
+`))
+	if err := m.Reload(cfg2); err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "pg.sshcfg"))
+	if err != nil {
+		t.Fatalf("read generated: %v", err)
+	}
+	if !strings.Contains(string(data), "Port 2222") {
+		t.Fatalf("generated config not regenerated after host change:\n%s", data)
+	}
+}
+
+func TestReloadRemovesGeneratedFileForDroppedTunnel(t *testing.T) {
+	dir := t.TempDir()
+	cfg1, _ := config.Parse([]byte(`
+hosts:
+  entryA: {host: 198.51.100.7, port: 65522, user: userA}
+groups:
+  prod:
+    - {name: pg, local: "5432", remote: 10.0.1.5:5432, via_host: entryA}
+`))
+	m := NewManagerWithGenDir("/usr/bin/ssh", cfg1, dir)
+	if _, err := os.Stat(filepath.Join(dir, "pg.sshcfg")); err != nil {
+		t.Fatalf("precondition: %v", err)
+	}
+	cfg2, _ := config.Parse([]byte(`groups: {}`))
+	if err := m.Reload(cfg2); err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "pg.sshcfg")); !os.IsNotExist(err) {
+		t.Fatalf("expected generated file removed, stat err=%v", err)
+	}
+}

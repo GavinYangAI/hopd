@@ -71,6 +71,20 @@ func writeGenerated(path, text string) error {
 	return os.Rename(tmp, path)
 }
 
+// genConfigChanged reports whether t's freshly generated ssh config differs
+// from what is on disk. Legacy tunnels (no via_host) always report false.
+func (m *Manager) genConfigChanged(cfg *config.Config, t config.Tunnel) bool {
+	text, _, err := sshconf.Generate(cfg, t)
+	if err != nil || text == "" {
+		return false
+	}
+	existing, err := os.ReadFile(filepath.Join(m.genDir, t.Name+".sshcfg"))
+	if err != nil {
+		return true // missing/unreadable => must (re)write
+	}
+	return string(existing) != text
+}
+
 // StartAutostart brings up every tunnel marked autostart in config. The daemon
 // calls it once at startup so marked tunnels reconnect after a reboot without
 // manual intervention. Tunnels needing interactive auth (2FA/passphrase) settle
@@ -170,7 +184,7 @@ func (m *Manager) Reload(cfg *config.Config) error {
 	for _, t := range cfg.Tunnels() {
 		order = append(order, t.Name)
 		if r, ok := old[t.Name]; ok {
-			if !boundsChanged && reflect.DeepEqual(r.Spec(), t) {
+			if !boundsChanged && reflect.DeepEqual(r.Spec(), t) && !m.genConfigChanged(cfg, t) {
 				next[t.Name] = r
 				delete(old, t.Name)
 				continue
@@ -178,17 +192,18 @@ func (m *Manager) Reload(cfg *config.Config) error {
 			wasActive := isActive(r.Snapshot().State)
 			r.Stop()
 			delete(old, t.Name)
-			nr := tunnel.NewRunner(t, m.sshPath, cfg.Restart.Min, cfg.Restart.Max)
+			nr := m.buildRunner(cfg, t)
 			if wasActive {
 				nr.Start()
 			}
 			next[t.Name] = nr
 			continue
 		}
-		next[t.Name] = tunnel.NewRunner(t, m.sshPath, cfg.Restart.Min, cfg.Restart.Max)
+		next[t.Name] = m.buildRunner(cfg, t)
 	}
-	for _, r := range old { // tunnels removed from config
+	for name, r := range old { // tunnels removed from config
 		r.Stop()
+		_ = os.Remove(filepath.Join(m.genDir, name+".sshcfg"))
 	}
 	m.cfg = cfg
 	m.runners = next
