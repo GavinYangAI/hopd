@@ -204,8 +204,9 @@ func valueOr(s, fallback string) string {
 
 type tappable struct {
 	widget.BaseWidget
-	content fyne.CanvasObject
-	onTap   func()
+	content  fyne.CanvasObject
+	onTap    func()
+	disabled bool
 }
 
 func newTappable(content fyne.CanvasObject, onTap func()) *tappable {
@@ -214,7 +215,12 @@ func newTappable(content fyne.CanvasObject, onTap func()) *tappable {
 	return t
 }
 
-func (t *tappable) Tapped(*fyne.PointEvent)             { call(t.onTap) }
+func (t *tappable) Tapped(*fyne.PointEvent) {
+	if t.disabled {
+		return
+	}
+	call(t.onTap)
+}
 func (t *tappable) CreateRenderer() fyne.WidgetRenderer { return widget.NewSimpleRenderer(t.content) }
 
 // ---- tunnel card ---------------------------------------------------------

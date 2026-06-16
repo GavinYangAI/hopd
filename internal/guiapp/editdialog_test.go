@@ -56,6 +56,18 @@ func TestNewEditForm_LegacyTunnelIsReadMostly(t *testing.T) {
 	if ef.migrateBtn == nil {
 		t.Fatal("expected a 迁移为主机 button for a legacy tunnel")
 	}
+
+	// The route cards must be inert: tapping the via_host card must NOT switch a
+	// legacy tunnel's route, otherwise the user could bypass MigrateLegacyTunnel.
+	before := ef.route
+	ef.viaHostCard.tap.Tapped(nil)
+	if ef.route != before {
+		t.Fatalf("tapping a disabled route card changed route from %q to %q", before, ef.route)
+	}
+	// The via_host picker must also be disabled in read-mostly mode.
+	if !ef.viaHostSel.Disabled() {
+		t.Fatal("legacy via_host picker should be disabled in read-mostly mode")
+	}
 }
 
 func TestNewEditForm_ViaHostTunnelIsNotLegacy(t *testing.T) {

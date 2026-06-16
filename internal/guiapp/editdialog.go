@@ -293,6 +293,9 @@ func (ef *editForm) build(f gui.TunnelForm) {
 		ef.viaHostCard.disable()
 		ef.directCard.disable()
 		ef.relayCard.disable()
+		// The via_host picker must be inert too, or a user could switch a legacy
+		// tunnel into via_host mode and Save without going through MigrateLegacyTunnel.
+		ef.viaHostSel.Disable()
 		ef.migrateBtn = widget.NewButtonWithIcon("迁移为主机", theme.ContentCopyIcon(), func() { ef.doMigrate() })
 		ef.migrateBtn.Importance = widget.HighImportance
 		banner := legacyMigrateBanner(ef.migrateBtn)
@@ -634,6 +637,7 @@ type routeCard struct {
 	root   *fyne.Container
 	bg     *canvas.Rectangle
 	radio  *canvas.Circle
+	tap    *tappable
 	active bool
 }
 
@@ -656,8 +660,8 @@ func newRouteCard(title, badge, desc, example string, onTap func()) *routeCard {
 
 	rc.bg = roundRect(pal.surface1, 12, 1, pal.border)
 	inner := container.NewBorder(nil, nil, container.New(layoutPadXY{px: 0, py: 2}, radioWrap), nil, col)
-	rc.root = container.NewStack(rc.bg, container.New(layoutPadXY{px: 14, py: 14},
-		newTappable(inner, onTap)))
+	rc.tap = newTappable(inner, onTap)
+	rc.root = container.NewStack(rc.bg, container.New(layoutPadXY{px: 14, py: 14}, rc.tap))
 	return rc
 }
 
@@ -680,8 +684,12 @@ func (rc *routeCard) setActive(on bool) {
 	rc.radio.Refresh()
 }
 
-// disable greys a card so it can't be tapped (used in legacy read-mostly mode).
+// disable greys a card AND makes it inert so it can't be tapped (used in legacy
+// read-mostly mode). Greying alone is not enough: tappable.Tapped still fires.
 func (rc *routeCard) disable() {
+	if rc.tap != nil {
+		rc.tap.disabled = true
+	}
 	rc.bg.FillColor = pal.surface2
 	rc.bg.StrokeColor = pal.border
 	rc.bg.StrokeWidth = 1
