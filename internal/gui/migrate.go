@@ -59,30 +59,51 @@ func migrateVia(cfg *config.Config, t config.Tunnel, readSSHConfig func() ([]byt
 		return "", fmt.Errorf("ssh config has no Host %q to migrate", alias)
 	}
 
-	// Reserve a unique name for the entry host first, so a jump dependency that
-	// resolves to the same slug can't collide with it.
-	entryName := uniqueHostName(cfg, alias)
+	// Compute all host names up front, threading already-claimed names so that
+	// an entry alias and a jump alias which slug to the same base get distinct
+	// keys. Nothing is committed to cfg until every name is resolved.
+	claimed := map[string]bool{}
+	entryName := uniqueHostName(cfg, alias, claimed)
+	claimed[entryName] = true
 
 	// Pull in the ProxyJump target only when it is also importable.
 	jump := ""
+	type pending struct {
+		name string
+		host config.Host
+	}
+	var toAdd []pending
 	if pj := strings.TrimSpace(ih.ProxyJump); pj != "" {
 		if jih, ok := byName[pj]; ok {
-			jumpName := uniqueHostName(cfg, pj)
-			if addErr := cfg.AddHost(jumpName, importedToHost(jih, "")); addErr != nil {
-				return "", addErr
-			}
+			jumpName := uniqueHostName(cfg, pj, claimed)
+			claimed[jumpName] = true
 			jump = jumpName
+			toAdd = append(toAdd, pending{jumpName, importedToHost(jih, "")})
 		}
 	}
+	toAdd = append(toAdd, pending{entryName, importedToHost(ih, jump)})
 
-	if addErr := cfg.AddHost(entryName, importedToHost(ih, jump)); addErr != nil {
-		return "", addErr
+	// Commit: add every host, then rewrite the tunnel. If anything fails, roll
+	// back so cfg is left unchanged (the "on error cfg unchanged" contract).
+	var added []string
+	rollback := func() {
+		for _, n := range added {
+			_ = cfg.RemoveHost(n)
+		}
+	}
+	for _, p := range toAdd {
+		if addErr := cfg.AddHost(p.name, p.host); addErr != nil {
+			rollback()
+			return "", addErr
+		}
+		added = append(added, p.name)
 	}
 
 	t.Via = ""
 	t.Jump = nil
 	t.ViaHost = entryName
 	if err := cfg.UpdateTunnel(t.Name, t); err != nil {
+		rollback()
 		return "", err
 	}
 	return entryName, nil
@@ -105,19 +126,25 @@ func importedToHost(ih sshconf.ImportedHost, jump string) config.Host {
 }
 
 // uniqueHostName turns a desired name into a config-safe, currently-unused host
-// key: it slugs the input and, on collision with an existing host, suffixes
-// -2, -3, … until free.
-func uniqueHostName(cfg *config.Config, desired string) string {
+// key: it slugs the input and, on collision with an existing host OR a name
+// already claimed in this migration, suffixes -2, -3, … until free.
+func uniqueHostName(cfg *config.Config, desired string, claimed map[string]bool) string {
+	free := func(name string) bool {
+		if _, taken := cfg.Host(name); taken {
+			return false
+		}
+		return !claimed[name]
+	}
 	base := slug(desired)
 	if base == "" {
 		base = "host"
 	}
-	if _, taken := cfg.Host(base); !taken {
+	if free(base) {
 		return base
 	}
 	for i := 2; ; i++ {
 		cand := fmt.Sprintf("%s-%d", base, i)
-		if _, taken := cfg.Host(cand); !taken {
+		if free(cand) {
 			return cand
 		}
 	}
@@ -154,7 +181,7 @@ func migrateJump(cfg *config.Config, t config.Tunnel) (string, error) {
 	}
 
 	// Name and reserve every host up front so later AddHosts can't collide.
-	endpointName := uniqueHostName(cfg, slug(destHost)+"-entry")
+	endpointName := uniqueHostName(cfg, slug(destHost)+"-entry", nil)
 	endpoint := config.Host{Host: destHost, Port: 22}
 	if err := cfg.AddHost(endpointName, endpoint); err != nil {
 		return "", err
@@ -172,7 +199,7 @@ func migrateJump(cfg *config.Config, t config.Tunnel) (string, error) {
 				port = n
 			}
 		}
-		hopNames[i] = uniqueHostName(cfg, host)
+		hopNames[i] = uniqueHostName(cfg, host, nil)
 		hops[i] = config.Host{Host: host, Port: port, User: user}
 		// Reserve the name immediately so the next iteration's uniqueHostName
 		// sees it as taken.

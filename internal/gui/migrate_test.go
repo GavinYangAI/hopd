@@ -95,6 +95,65 @@ groups:
 	}
 }
 
+func TestMigrateLegacyTunnel_ViaAlias_SlugCollision(t *testing.T) {
+	// The via alias and its ProxyJump alias slug to the SAME base name
+	// ("host-a"), which used to make the entry host and jump host compute the
+	// same key: AddHost(jumpName) succeeded, then AddHost(entryName) failed with
+	// "already exists", aborting migration AND leaving the jump host inserted
+	// (violating the "on error cfg unchanged" contract).
+	const collidingSSH = `
+Host host(a
+    HostName 198.51.100.7
+    Port 65522
+    User userEntry
+    ProxyJump host)a
+
+Host host)a
+    HostName 203.0.113.9
+    User userJump
+`
+	cfg := parseCfg(t, `
+groups:
+  g:
+    - {name: t1, local: "1", remote: x:5432, via: "host(a"}
+`)
+	read := func() ([]byte, error) { return []byte(collidingSSH), nil }
+
+	newHost, err := MigrateLegacyTunnel(cfg, "t1", read)
+	if err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	// Two DISTINCT host names must have been created.
+	hosts := cfg.Hosts()
+	if len(hosts) != 2 {
+		t.Fatalf("expected 2 hosts, got %d: %v", len(hosts), hosts)
+	}
+
+	// The tunnel points at the entry host.
+	tn, _ := cfg.Tunnel("t1")
+	if tn.ViaHost != newHost || tn.Via != "" {
+		t.Fatalf("tunnel not rewritten: %+v (newHost=%q)", tn, newHost)
+	}
+
+	// The entry host captures the via alias and chains to the jump host.
+	entry, ok := cfg.Host(newHost)
+	if !ok || entry.Host != "198.51.100.7" || entry.User != "userEntry" {
+		t.Fatalf("entry host mismatch: %+v (ok=%v)", entry, ok)
+	}
+	if entry.Jump == "" || entry.Jump == newHost {
+		t.Fatalf("entry.Jump should be a distinct jump host, got %q (entry=%q)", entry.Jump, newHost)
+	}
+	jump, ok := cfg.Host(entry.Jump)
+	if !ok || jump.Host != "203.0.113.9" || jump.User != "userJump" {
+		t.Fatalf("jump host mismatch: %+v (ok=%v)", jump, ok)
+	}
+
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("migrated config invalid: %v", err)
+	}
+}
+
 func TestMigrateLegacyTunnel_ViaAlias_NotFound(t *testing.T) {
 	cfg := parseCfg(t, `
 groups:
