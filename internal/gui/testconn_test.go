@@ -54,6 +54,39 @@ groups:
 	return cfg
 }
 
+func TestRemoveKnownHostEntry_IssuesSshKeygenR(t *testing.T) {
+	var gotName string
+	var gotArgs []string
+	run := func(ctx context.Context, name string, args ...string) ([]byte, []byte, error) {
+		gotName = name
+		gotArgs = args
+		return nil, nil, nil // success
+	}
+	if err := RemoveKnownHostEntry(context.Background(), "198.51.100.7", run); err != nil {
+		t.Fatalf("RemoveKnownHostEntry: %v", err)
+	}
+	if gotName != "ssh-keygen" {
+		t.Fatalf("ran %q, want ssh-keygen", gotName)
+	}
+	want := []string{"-R", "198.51.100.7"}
+	if !reflect.DeepEqual(gotArgs, want) {
+		t.Fatalf("args = %v, want %v", gotArgs, want)
+	}
+}
+
+func TestRemoveKnownHostEntry_WrapsRunnerError(t *testing.T) {
+	run := func(ctx context.Context, name string, args ...string) ([]byte, []byte, error) {
+		return nil, []byte("permission denied"), errors.New("exit status 1")
+	}
+	err := RemoveKnownHostEntry(context.Background(), "myhost", run)
+	if err == nil {
+		t.Fatal("expected an error when ssh-keygen fails")
+	}
+	if !strings.Contains(err.Error(), "myhost") || !strings.Contains(err.Error(), "permission denied") {
+		t.Fatalf("error should name the host and the stderr, got %v", err)
+	}
+}
+
 func TestTestConnection_Success(t *testing.T) {
 	cfg := testConnCfg(t)
 	var gotArgs []string
