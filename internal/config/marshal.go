@@ -152,3 +152,44 @@ func (c *Config) RemoveTunnel(name string) error {
 	c.reindex()
 	return nil
 }
+
+// AddHost inserts a new reusable host. It errors if the name already exists.
+func (c *Config) AddHost(name string, h Host) error {
+	if c.hosts == nil {
+		c.hosts = map[string]Host{}
+	}
+	if _, ok := c.hosts[name]; ok {
+		return fmt.Errorf("host %q already exists", name)
+	}
+	c.hosts[name] = h
+	return nil
+}
+
+// UpdateHost replaces an existing host's params.
+func (c *Config) UpdateHost(name string, h Host) error {
+	if _, ok := c.hosts[name]; !ok {
+		return fmt.Errorf("host %q not found", name)
+	}
+	c.hosts[name] = h
+	return nil
+}
+
+// RemoveHost deletes a host. It errors if any tunnel's ViaHost or any other
+// host's Jump still references it, so the config never dangles.
+func (c *Config) RemoveHost(name string) error {
+	if _, ok := c.hosts[name]; !ok {
+		return fmt.Errorf("host %q not found", name)
+	}
+	for _, t := range c.tunnels {
+		if t.ViaHost == name {
+			return fmt.Errorf("host %q is referenced by tunnel %q", name, t.Name)
+		}
+	}
+	for hn, h := range c.hosts {
+		if h.Jump == name {
+			return fmt.Errorf("host %q is referenced by host %q (jump)", name, hn)
+		}
+	}
+	delete(c.hosts, name)
+	return nil
+}

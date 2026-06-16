@@ -154,6 +154,42 @@ groups:
 	}
 }
 
+func TestHostMutators(t *testing.T) {
+	cfg, err := Parse([]byte(`
+hosts:
+  a: {host: h1}
+groups:
+  g:
+    - {name: t1, local: "5432", remote: x:5432, via_host: a}
+`))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if err := cfg.AddHost("b", Host{Host: "h2", Port: 22}); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	if err := cfg.AddHost("a", Host{Host: "dup"}); err == nil {
+		t.Fatal("add duplicate should fail")
+	}
+	if err := cfg.UpdateHost("b", Host{Host: "h2-new", Port: 2222}); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if h, _ := cfg.Host("b"); h.Host != "h2-new" || h.Port != 2222 {
+		t.Fatalf("update mismatch: %+v", h)
+	}
+	// Removing a host referenced by a tunnel must fail.
+	if err := cfg.RemoveHost("a"); err == nil {
+		t.Fatal("remove referenced host should fail")
+	}
+	// Unreferenced host removes cleanly.
+	if err := cfg.RemoveHost("b"); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	if _, ok := cfg.Host("b"); ok {
+		t.Fatal("b should be gone")
+	}
+}
+
 func countSub(s, sub string) int {
 	n := 0
 	for i := 0; i+len(sub) <= len(s); i++ {
