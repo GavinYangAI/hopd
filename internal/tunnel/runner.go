@@ -23,6 +23,9 @@ type Runner struct {
 	backoffMax time.Duration
 	localAddr  string
 
+	sshConfigPath string // when set, use BuildArgsVia (-F) instead of BuildArgs
+	entryHost     string // ssh destination alias for the -F path
+
 	mu         sync.Mutex
 	probe      func(addr string) bool
 	state      State
@@ -121,7 +124,7 @@ func (r *Runner) loop(ctx context.Context) {
 
 		r.set(StateStarting, "")
 		attemptCtx, attemptCancel := context.WithCancel(ctx)
-		cmd := exec.CommandContext(attemptCtx, r.sshPath, BuildArgs(r.tunnel)...)
+		cmd := exec.CommandContext(attemptCtx, r.sshPath, r.argv()...)
 		stderr, _ := cmd.StderrPipe()
 		if err := cmd.Start(); err != nil {
 			r.set(StateError, err.Error())
@@ -279,6 +282,28 @@ func (r *Runner) Logs() []string {
 
 // Spec returns the tunnel configuration this runner was built from.
 func (r *Runner) Spec() config.Tunnel { return r.tunnel }
+
+// SetSSHConfig attaches a hopd-generated ssh config so the runner launches ssh
+// with -F <path> and connects to entry. Called by the daemon for via_host
+// tunnels before Start.
+func (r *Runner) SetSSHConfig(path, entry string) {
+	r.mu.Lock()
+	r.sshConfigPath = path
+	r.entryHost = entry
+	r.mu.Unlock()
+}
+
+// argv builds the ssh argument vector for the current attempt, choosing the
+// generated-config path when one is attached.
+func (r *Runner) argv() []string {
+	r.mu.Lock()
+	path, entry := r.sshConfigPath, r.entryHost
+	r.mu.Unlock()
+	if path != "" {
+		return BuildArgsVia(r.tunnel, path, entry)
+	}
+	return BuildArgs(r.tunnel)
+}
 
 // Snapshot returns a point-in-time status for the IPC layer.
 func (r *Runner) Snapshot() ipc.TunnelStatus {

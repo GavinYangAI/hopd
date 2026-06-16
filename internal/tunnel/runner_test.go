@@ -35,6 +35,25 @@ func testTunnel() config.Tunnel {
 	return config.Tunnel{Name: "t", Group: "g", Local: "15999", Remote: "h:80", Via: "bastion"}
 }
 
+func TestRunnerArgvSelection(t *testing.T) {
+	tun := config.Tunnel{Name: "pg", Local: "5432", Remote: "10.0.1.5:5432", ViaHost: "entryA"}
+
+	r := NewRunner(tun, "/usr/bin/ssh", time.Second, time.Minute)
+	// Legacy path until a generated config is attached.
+	if got := r.argv(); got[0] == "-F" {
+		t.Fatalf("expected legacy argv without -F, got %v", got)
+	}
+
+	r.SetSSHConfig("/tmp/hopd/pg.sshcfg", "entryA")
+	got := r.argv()
+	if len(got) < 2 || got[0] != "-F" || got[1] != "/tmp/hopd/pg.sshcfg" {
+		t.Fatalf("expected -F argv, got %v", got)
+	}
+	if got[len(got)-1] != "entryA" {
+		t.Fatalf("expected entry host as ssh target, got %v", got)
+	}
+}
+
 func TestRunner_RetriesOnQuickExit(t *testing.T) {
 	ssh := writeFakeSSH(t, "exit 1")
 	r := NewRunner(testTunnel(), ssh, time.Millisecond, 5*time.Millisecond)
