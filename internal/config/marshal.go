@@ -11,7 +11,17 @@ import (
 // shape Parse reads, so Marshal->Parse round-trips.
 type marshalShape struct {
 	Defaults marshalDefaults            `yaml:"defaults,omitempty"`
+	Hosts    map[string]marshalHost     `yaml:"hosts,omitempty"`
 	Groups   map[string][]marshalTunnel `yaml:"groups"`
+}
+
+type marshalHost struct {
+	Host       string            `yaml:"host"`
+	Port       int               `yaml:"port,omitempty"`
+	User       string            `yaml:"user,omitempty"`
+	Key        string            `yaml:"key,omitempty"`
+	Jump       string            `yaml:"jump,omitempty"`
+	SSHOptions map[string]string `yaml:"ssh_options,omitempty"`
 }
 
 type marshalDefaults struct {
@@ -30,6 +40,7 @@ type marshalTunnel struct {
 	Remote     string            `yaml:"remote"`
 	Via        string            `yaml:"via,omitempty"`
 	Jump       []string          `yaml:"jump,omitempty"`
+	ViaHost    string            `yaml:"via_host,omitempty"`
 	SSHOptions map[string]string `yaml:"ssh_options,omitempty"`
 	Autostart  bool              `yaml:"autostart,omitempty"`
 }
@@ -48,6 +59,20 @@ func Marshal(c *Config) ([]byte, error) {
 		Max: c.Restart.Max.String(),
 	}
 
+	if len(c.hosts) > 0 {
+		shape.Hosts = make(map[string]marshalHost, len(c.hosts))
+		for name, h := range c.hosts {
+			shape.Hosts[name] = marshalHost{
+				Host:       h.Host,
+				Port:       h.Port,
+				User:       h.User,
+				Key:        h.Key,
+				Jump:       h.Jump,
+				SSHOptions: h.SSHOptions,
+			}
+		}
+	}
+
 	for _, t := range c.tunnels {
 		mt := marshalTunnel{
 			Name:      t.Name,
@@ -55,6 +80,7 @@ func Marshal(c *Config) ([]byte, error) {
 			Remote:    t.Remote,
 			Via:       t.Via,
 			Jump:      t.Jump,
+			ViaHost:   t.ViaHost,
 			Autostart: t.Autostart,
 		}
 		opts := map[string]string{}

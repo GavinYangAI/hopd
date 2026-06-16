@@ -109,6 +109,51 @@ groups:
 	}
 }
 
+func TestMarshalHostsRoundTrip(t *testing.T) {
+	src := []byte(`
+hosts:
+  entryA:
+    host: 198.51.100.7
+    port: 65522
+    user: userA
+    key: ~/.ssh/idA
+    jump: bastionB
+  bastionB:
+    host: 203.0.113.9
+    user: userB
+groups:
+  prod:
+    - name: pg
+      local: "5432"
+      remote: 10.0.1.5:5432
+      via_host: entryA
+`)
+	cfg, err := Parse(src)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	out, err := Marshal(cfg)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	cfg2, err := Parse(out)
+	if err != nil {
+		t.Fatalf("reparse: %v\n%s", err, out)
+	}
+	a, ok := cfg2.Host("entryA")
+	if !ok || a.Port != 65522 || a.User != "userA" || a.Key != "~/.ssh/idA" || a.Jump != "bastionB" {
+		t.Fatalf("entryA round-trip mismatch: %+v (ok=%v)", a, ok)
+	}
+	tun, ok := cfg2.Tunnel("pg")
+	if !ok || tun.ViaHost != "entryA" {
+		t.Fatalf("pg via_host round-trip mismatch: %+v (ok=%v)", tun, ok)
+	}
+	b, ok := cfg2.Host("bastionB")
+	if !ok || b.Port != 22 {
+		t.Fatalf("bastionB round-trip mismatch: %+v (ok=%v)", b, ok)
+	}
+}
+
 func countSub(s, sub string) int {
 	n := 0
 	for i := 0; i+len(sub) <= len(s); i++ {
