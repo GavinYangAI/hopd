@@ -173,7 +173,10 @@ func forwardDiagram(t ipc.TunnelStatus) fyne.CanvasObject {
 	nodes := []fyne.CanvasObject{
 		diagNode("本机", ":"+localPart(t.Local), false),
 	}
-	if strings.TrimSpace(t.Via) != "" {
+	switch {
+	case strings.TrimSpace(t.ViaHost) != "":
+		nodes = append(nodes, arrow(), diagNode("主机", t.ViaHost, true))
+	case strings.TrimSpace(t.Via) != "":
 		nodes = append(nodes, arrow(), diagNode("中继", t.Via, true))
 	}
 	nodes = append(nodes, arrow(), diagNode(svcFor(t.Remote), valueOr(t.Remote, "—"), false))
