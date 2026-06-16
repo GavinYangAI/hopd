@@ -69,7 +69,7 @@ groups:
 groups:
   g:
     - { name: a, local: 1, remote: h:1 }
-`, "must set via or jump"},
+`, "must set via_host, via, or jump"},
 		{"bad remote", `
 groups:
   g:

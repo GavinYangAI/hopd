@@ -1,6 +1,7 @@
 package config
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -41,6 +42,87 @@ groups:
 	}
 	if b.Port != 22 { // default applied
 		t.Fatalf("bastionB default port = %d, want 22", b.Port)
+	}
+}
+
+func TestValidateHostRefs(t *testing.T) {
+	cases := []struct {
+		name string
+		yaml string
+		want string // substring expected in the error; "" => expect success
+	}{
+		{
+			name: "ok",
+			yaml: `
+hosts:
+  a: {host: h1}
+groups:
+  g:
+    - {name: t1, local: "5432", remote: x:5432, via_host: a}
+`,
+			want: "",
+		},
+		{
+			name: "unknown via_host",
+			yaml: `
+groups:
+  g:
+    - {name: t1, local: "5432", remote: x:5432, via_host: nope}
+`,
+			want: "unknown host",
+		},
+		{
+			name: "both via_host and legacy",
+			yaml: `
+hosts:
+  a: {host: h1}
+groups:
+  g:
+    - {name: t1, local: "5432", remote: x:5432, via_host: a, via: legacyalias}
+`,
+			want: "not both",
+		},
+		{
+			name: "host jump cycle",
+			yaml: `
+hosts:
+  a: {host: h1, jump: b}
+  b: {host: h2, jump: a}
+groups:
+  g:
+    - {name: t1, local: "5432", remote: x:5432, via_host: a}
+`,
+			want: "cycle",
+		},
+		{
+			name: "host jump unknown",
+			yaml: `
+hosts:
+  a: {host: h1, jump: ghost}
+groups:
+  g:
+    - {name: t1, local: "5432", remote: x:5432, via_host: a}
+`,
+			want: "unknown host",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg, err := Parse([]byte(tc.yaml))
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			err = cfg.Validate()
+			if tc.want == "" {
+				if err != nil {
+					t.Fatalf("want ok, got %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("want error containing %q, got %v", tc.want, err)
+			}
+		})
 	}
 }
 

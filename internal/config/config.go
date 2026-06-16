@@ -223,8 +223,16 @@ func (c *Config) Validate() error {
 		}
 		seenName[t.Name] = true
 
-		if t.Via == "" && len(t.Jump) == 0 {
-			return fmt.Errorf("tunnel %q: must set via or jump", t.Name)
+		hasLegacy := t.Via != "" || len(t.Jump) > 0
+		if t.ViaHost != "" {
+			if hasLegacy {
+				return fmt.Errorf("tunnel %q: set either via_host or via/jump, not both", t.Name)
+			}
+			if _, ok := c.hosts[t.ViaHost]; !ok {
+				return fmt.Errorf("tunnel %q: via_host references unknown host %q", t.Name, t.ViaHost)
+			}
+		} else if !hasLegacy {
+			return fmt.Errorf("tunnel %q: must set via_host, via, or jump", t.Name)
 		}
 		if !strings.Contains(t.Remote, ":") {
 			return fmt.Errorf("tunnel %q: remote must be host:port, got %q", t.Name, t.Remote)
@@ -238,6 +246,26 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("duplicate local listen address %q (tunnel %q)", key, t.Name)
 		}
 		seenLocal[key] = true
+	}
+
+	for name, h := range c.hosts {
+		if h.Port < 1 || h.Port > 65535 {
+			return fmt.Errorf("host %q: invalid port %d", name, h.Port)
+		}
+		if h.Jump != "" {
+			if _, ok := c.hosts[h.Jump]; !ok {
+				return fmt.Errorf("host %q: jump references unknown host %q", name, h.Jump)
+			}
+		}
+	}
+	for name := range c.hosts {
+		seen := map[string]bool{}
+		for cur := name; cur != ""; cur = c.hosts[cur].Jump {
+			if seen[cur] {
+				return fmt.Errorf("host %q: jump chain has a cycle", name)
+			}
+			seen[cur] = true
+		}
 	}
 	return nil
 }
