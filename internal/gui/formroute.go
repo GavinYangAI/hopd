@@ -6,22 +6,26 @@ import "strings"
 // form. It is not stored in config.Tunnel directly: "relay" maps to Via, and
 // "direct" maps to an (optional) inline Jump chain.
 const (
-	RouteDirect = "direct" // ssh logs into the target itself (optionally via a jump host)
-	RouteRelay  = "relay"  // ssh logs into a configured relay (ssh alias / via), which forwards
+	RouteDirect  = "direct" // ssh logs into the target itself (optionally via a jump host)
+	RouteRelay   = "relay"  // ssh logs into a configured relay (ssh alias / via), which forwards
+	RouteViaHost = "host"   // ssh logs into a saved Host entry (new model), which forwards
 )
 
-// RouteOf infers the initial route for an existing tunnel form: a tunnel with
-// a via alias is a relay; anything else is treated as direct. A brand-new blank
-// form (no via, no jump, no name) returns "" so the UI can force an explicit
-// choice.
+// RouteOf infers the initial route for an existing tunnel form. A tunnel with a
+// via_host is the new host model; a via alias is a legacy relay; an inline jump
+// is legacy direct. A brand-new blank form (no via_host, no via, no jump, no
+// name) defaults to the host model so new tunnels use saved hosts.
 func RouteOf(f TunnelForm) string {
+	if strings.TrimSpace(f.ViaHost) != "" {
+		return RouteViaHost
+	}
 	if strings.TrimSpace(f.Via) != "" {
 		return RouteRelay
 	}
 	if strings.TrimSpace(f.JumpHost) != "" || len(f.RawJump) > 0 {
 		return RouteDirect
 	}
-	return ""
+	return RouteViaHost
 }
 
 // CheckRoute validates the guided form given the currently selected route. It

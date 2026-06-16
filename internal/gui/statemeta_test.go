@@ -47,8 +47,8 @@ func TestRouteOf(t *testing.T) {
 	if r := RouteOf(TunnelForm{RawJump: []string{"a@h:22"}}); r != RouteDirect {
 		t.Fatalf("raw-jump form should be direct, got %q", r)
 	}
-	if r := RouteOf(TunnelForm{}); r != "" {
-		t.Fatalf("blank form should leave route unselected, got %q", r)
+	if r := RouteOf(TunnelForm{}); r != RouteViaHost {
+		t.Fatalf("blank form should default to the host model, got %q", r)
 	}
 }
 
