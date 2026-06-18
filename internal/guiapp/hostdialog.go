@@ -263,7 +263,7 @@ func showHostDialog(win fyne.Window, store *gui.ConfigStore, initial gui.HostFor
 		if err := saveHost(store, editingName, hf.value()); err != nil {
 			if errors.Is(err, gui.ErrReloadAfterSave) {
 				dlg.Hide()
-				dialog.ShowInformation("已保存", "主机已保存。daemon 未运行，将在它启动后生效。", win)
+				reportSaveOutcome(win, err, "已保存", "主机已保存。daemon 未运行，将在它启动后生效。")
 				call(onDone)
 				return
 			}

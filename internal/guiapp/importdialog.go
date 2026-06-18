@@ -183,9 +183,10 @@ func showImportDialog(win fyne.Window, cfg *config.Config, store *gui.ConfigStor
 		n, err := f.apply(store)
 		if err != nil {
 			if errors.Is(err, gui.ErrReloadAfterSave) {
-				// Saved, but the daemon couldn't be told to reload — still a success.
+				// Saved, but the daemon couldn't be told to reload — the import
+				// itself succeeded either way.
 				call(onDone)
-				dialog.ShowInformation("已导入", importedMsg(n)+" daemon 未运行，将在它启动后生效。", win)
+				reportSaveOutcome(win, err, "已导入", importedMsg(n)+" daemon 未运行，将在它启动后生效。")
 				return
 			}
 			dialog.ShowError(err, win)

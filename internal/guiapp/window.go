@@ -540,11 +540,7 @@ func (d *dashboard) deleteTunnel() {
 			return
 		}
 		if err := d.store.Save(cfg); err != nil {
-			if isReloadWarning(err) {
-				dialog.ShowInformation("已删除", "配置已保存。daemon 未运行，将在它启动后生效。", d.win)
-			} else {
-				dialog.ShowError(err, d.win)
-			}
+			reportSaveOutcome(d.win, err, "已删除", "配置已保存。daemon 未运行，将在它启动后生效。")
 		}
 	}, d.win)
 }
@@ -552,6 +548,37 @@ func (d *dashboard) deleteTunnel() {
 // isReloadWarning reports whether err is the soft "saved but daemon reload
 // failed" warning (config is on disk; not a real failure).
 func isReloadWarning(err error) bool { return errors.Is(err, gui.ErrReloadAfterSave) }
+
+// reportSaveOutcome shows the right dialog for a non-nil ConfigStore.Save error:
+//   - daemon merely unreachable → gentle info (softTitle/softMsg): the config is
+//     saved and will apply once the daemon starts;
+//   - daemon reached but rejected the new config → a clear error showing the
+//     daemon's reason: saved to disk, but the tunnel won't take effect until the
+//     config is fixed (or the daemon is brought up to the app's version);
+//   - anything else → the raw save failure.
+func reportSaveOutcome(win fyne.Window, err error, softTitle, softMsg string) {
+	switch msg, rejected := rejectionMessage(err); {
+	case rejected:
+		dialog.ShowError(errors.New(msg), win)
+	case isReloadWarning(err):
+		dialog.ShowInformation(softTitle, softMsg, win)
+	default:
+		dialog.ShowError(err, win)
+	}
+}
+
+// rejectionMessage returns the user-facing text for a config that was saved to
+// disk but refused by a reachable daemon (e.g. validation failed, or the daemon
+// is older than this app and doesn't understand a newer field). ok is false
+// when err is not such a rejection — a merely-unreachable daemon or a generic
+// save failure is handled elsewhere.
+func rejectionMessage(err error) (string, bool) {
+	var rej *gui.DaemonRejected
+	if !errors.As(err, &rej) {
+		return "", false
+	}
+	return fmt.Sprintf("配置已保存到磁盘，但 daemon 拒绝加载，隧道暂不会生效：%s。\n请检查配置，或确认 daemon 与本应用版本一致后重试。", rej.Reason), true
+}
 
 func (d *dashboard) run(fn func() error) {
 	if err := fn(); err != nil {

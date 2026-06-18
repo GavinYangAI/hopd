@@ -140,7 +140,7 @@ func showSettingsDialog(win fyne.Window, store *gui.ConfigStore) {
 		if err := store.Save(c); err != nil {
 			if errors.Is(err, gui.ErrReloadAfterSave) {
 				dlg.Hide()
-				dialog.ShowInformation("已保存", "设置已保存。daemon 未运行，将在它启动后生效。", win)
+				reportSaveOutcome(win, err, "已保存", "设置已保存。daemon 未运行，将在它启动后生效。")
 				return
 			}
 			dialog.ShowError(err, win)

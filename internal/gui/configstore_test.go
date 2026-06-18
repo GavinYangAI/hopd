@@ -36,6 +36,42 @@ func TestConfigStore_SaveSurvivesReloadFailure(t *testing.T) {
 	}
 }
 
+func TestConfigStore_SavePreservesReloadErrorKind(t *testing.T) {
+	mkStore := func(reload func() error) *ConfigStore {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "config.yaml")
+		if err := os.WriteFile(path, []byte("groups:\n  g:\n    - {name: a, local: \"1\", remote: h:1, via: x}\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return NewConfigStore(path, reload)
+	}
+
+	t.Run("daemon rejected", func(t *testing.T) {
+		s := mkStore(func() error { return &DaemonRejected{Reason: "tunnel x: must set via or jump"} })
+		cfg, _ := s.Load()
+		err := s.Save(cfg)
+		if !errors.Is(err, ErrReloadAfterSave) {
+			t.Fatalf("still an after-save warning, got %v", err)
+		}
+		var rej *DaemonRejected
+		if !errors.As(err, &rej) || rej.Reason != "tunnel x: must set via or jump" {
+			t.Fatalf("rejection reason lost through Save: %v", err)
+		}
+	})
+
+	t.Run("daemon unreachable", func(t *testing.T) {
+		s := mkStore(func() error { return fmt.Errorf("%w: refused", ErrDaemonUnreachable) })
+		cfg, _ := s.Load()
+		err := s.Save(cfg)
+		if !errors.Is(err, ErrReloadAfterSave) {
+			t.Fatalf("still an after-save warning, got %v", err)
+		}
+		if !errors.Is(err, ErrDaemonUnreachable) {
+			t.Fatalf("unreachable kind lost through Save: %v", err)
+		}
+	})
+}
+
 func cfgTunnel(name, port string) config.Tunnel {
 	return config.Tunnel{Name: name, Group: "g", Local: port, Remote: "h:9", Via: "x"}
 }

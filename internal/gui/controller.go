@@ -1,12 +1,25 @@
 package gui
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/GavinYangAI/hopd/internal/ipc"
 )
+
+// ErrDaemonUnreachable means a command never reached the daemon because its
+// control socket could not be dialed — typically the daemon isn't running.
+var ErrDaemonUnreachable = errors.New("daemon 未运行")
+
+// DaemonRejected means the daemon was reached but refused the command. For a
+// reload this usually means the new config failed validation (a tunnel missing
+// via/jump, an unknown field on an out-of-date daemon, etc.). Reason carries the
+// daemon's own message so the UI can show why, instead of guessing "not running".
+type DaemonRejected struct{ Reason string }
+
+func (e *DaemonRejected) Error() string { return "daemon 拒绝了请求：" + e.Reason }
 
 // DaemonClient is the subset of the ipc client the controller needs. The real
 // client adapts to this in Task 6; tests inject a fake.
@@ -123,10 +136,10 @@ func (c *Controller) Connected() bool {
 func (c *Controller) cmd(req ipc.Request) error {
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w（%v）", ErrDaemonUnreachable, err)
 	}
 	if !resp.OK {
-		return fmt.Errorf("%s", resp.Error)
+		return &DaemonRejected{Reason: resp.Error}
 	}
 	return nil
 }

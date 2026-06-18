@@ -15,6 +15,7 @@ type fakeClient struct {
 	frames chan []ipc.TunnelStatus
 	done   []ipc.Request
 	failDo bool
+	doErr  error // transport error from Do (e.g. socket dial failure)
 }
 
 func newFakeClient() *fakeClient { return &fakeClient{frames: make(chan []ipc.TunnelStatus, 8)} }
@@ -32,6 +33,9 @@ func (f *fakeClient) Do(req ipc.Request) (ipc.Response, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.done = append(f.done, req)
+	if f.doErr != nil {
+		return ipc.Response{}, f.doErr
+	}
 	if f.failDo {
 		return ipc.Response{Error: "boom"}, nil
 	}
@@ -120,6 +124,39 @@ func TestController_DoErrorSurfaced(t *testing.T) {
 	c := NewController(fc)
 	if err := c.Up("x"); err == nil {
 		t.Fatal("expected error from non-OK response")
+	}
+}
+
+func TestController_ClassifiesDaemonRejection(t *testing.T) {
+	fc := newFakeClient()
+	fc.failDo = true // daemon reachable, replies OK=false with a reason
+	c := NewController(fc)
+
+	err := c.Reload()
+	var rej *DaemonRejected
+	if !errors.As(err, &rej) {
+		t.Fatalf("want *DaemonRejected, got %T: %v", err, err)
+	}
+	if rej.Reason != "boom" {
+		t.Fatalf("Reason = %q, want %q", rej.Reason, "boom")
+	}
+	if errors.Is(err, ErrDaemonUnreachable) {
+		t.Fatal("a rejection must not be classified as unreachable")
+	}
+}
+
+func TestController_ClassifiesDaemonUnreachable(t *testing.T) {
+	fc := newFakeClient()
+	fc.doErr = errors.New("dial unix: connect: connection refused")
+	c := NewController(fc)
+
+	err := c.Reload()
+	if !errors.Is(err, ErrDaemonUnreachable) {
+		t.Fatalf("want ErrDaemonUnreachable, got %v", err)
+	}
+	var rej *DaemonRejected
+	if errors.As(err, &rej) {
+		t.Fatal("a transport failure must not be classified as a rejection")
 	}
 }
 

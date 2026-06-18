@@ -80,7 +80,10 @@ func (s *ConfigStore) Save(cfg *config.Config) error {
 	// distinguishable warning so the UI can close the dialog and inform gently.
 	if s.reload != nil {
 		if err := s.reload(); err != nil {
-			return fmt.Errorf("%w: %v", ErrReloadAfterSave, err)
+			// Wrap with %w (not %v) so the reload error's kind survives — callers
+			// distinguish "daemon unreachable" (will apply on start) from
+			// "daemon rejected the config" (saved but won't take effect).
+			return fmt.Errorf("%w: %w", ErrReloadAfterSave, err)
 		}
 	}
 	return nil

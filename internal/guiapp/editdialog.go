@@ -617,10 +617,11 @@ func showEditDialog(win fyne.Window, title string, initial gui.TunnelForm, hostN
 		}
 		if err := onSubmit(ef.value()); err != nil {
 			if errors.Is(err, gui.ErrReloadAfterSave) {
-				// Config saved; the daemon just isn't running. Close and inform
-				// gently instead of showing a red error over a successful save.
+				// Config saved; reload failed. Close (the edit is on disk) and
+				// report — gently if the daemon's just down, with the daemon's
+				// reason if it rejected the new config.
 				dlg.Hide()
-				dialog.ShowInformation("已保存", "配置已保存。daemon 未运行，将在它启动后生效。", win)
+				reportSaveOutcome(win, err, "已保存", "配置已保存。daemon 未运行，将在它启动后生效。")
 				return
 			}
 			dialog.ShowError(err, win)
