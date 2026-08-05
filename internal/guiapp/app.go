@@ -20,6 +20,9 @@ type ui struct {
 	// last applied frame, kept so a theme switch can re-render the tray.
 	lastSnap      []ipc.TunnelStatus
 	lastConnected bool
+
+	// tray dedupes SetSystemTrayMenu/Icon calls across identical frames.
+	tray trayCache
 }
 
 const themePrefKey = "theme"
@@ -54,9 +57,11 @@ func (u *ui) applyUpdate(snap []ipc.TunnelStatus, connected bool) {
 		// Writing them inside fyne.Do serializes both access sites on the main
 		// thread, removing the data race with the controller goroutine.
 		u.lastSnap, u.lastConnected = snap, connected
-		if desk, ok := u.app.(desktop.App); ok {
-			desk.SetSystemTrayMenu(buildMenu(model, u.handlers()))
-			desk.SetSystemTrayIcon(iconFor(overall))
+		if u.tray.needsRender(model, overall, activeTheme) {
+			if desk, ok := u.app.(desktop.App); ok {
+				desk.SetSystemTrayMenu(buildMenu(model, u.handlers()))
+				desk.SetSystemTrayIcon(iconFor(overall))
+			}
 		}
 		u.dash.updateState(snap, connected)
 	})

@@ -154,3 +154,30 @@ func TestThemeMenu(t *testing.T) {
 		t.Fatalf("SetTheme wired to %q, want graphite", picked)
 	}
 }
+
+func TestTrayCache_NeedsRender(t *testing.T) {
+	up := gui.MenuModel{Connected: true, Summary: "1 已连通", Groups: []gui.MenuGroup{
+		{Name: "g", Items: []gui.MenuTunnelItem{{Name: "a", Label: "a · 已连通", State: "UP", Checked: true}}},
+	}}
+
+	var c trayCache
+	if !c.needsRender(up, gui.OverallAllUp, "mist") {
+		t.Fatal("first render must always happen")
+	}
+	if c.needsRender(up, gui.OverallAllUp, "mist") {
+		t.Fatal("identical model/overall/theme must not re-render")
+	}
+
+	down := gui.MenuModel{Connected: true, Summary: "1 已断开", Groups: []gui.MenuGroup{
+		{Name: "g", Items: []gui.MenuTunnelItem{{Name: "a", Label: "a · 已断开", State: "DOWN", Checked: false}}},
+	}}
+	if !c.needsRender(down, gui.OverallProblem, "mist") {
+		t.Fatal("model change must re-render")
+	}
+	if c.needsRender(down, gui.OverallProblem, "mist") {
+		t.Fatal("unchanged again must not re-render")
+	}
+	if !c.needsRender(down, gui.OverallProblem, "slate") {
+		t.Fatal("theme change must re-render (checkmark moves)")
+	}
+}

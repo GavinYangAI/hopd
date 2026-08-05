@@ -1,9 +1,31 @@
 package guiapp
 
 import (
+	"reflect"
+
 	"fyne.io/fyne/v2"
 	"github.com/GavinYangAI/hopd/internal/gui"
 )
+
+// trayCache remembers the last rendered tray state so identical 1 Hz status
+// frames don't rebuild the native menu/icon (each rebuild allocates native
+// menu items and re-encodes the icon for no visible change).
+type trayCache struct {
+	rendered bool
+	model    gui.MenuModel
+	overall  gui.Overall
+	theme    string
+}
+
+// needsRender reports whether the tray must be rebuilt for the given state and,
+// if so, records that state as rendered.
+func (c *trayCache) needsRender(m gui.MenuModel, o gui.Overall, theme string) bool {
+	if c.rendered && c.overall == o && c.theme == theme && reflect.DeepEqual(c.model, m) {
+		return false
+	}
+	c.rendered, c.model, c.overall, c.theme = true, m, o, theme
+	return true
+}
 
 // Handlers are the callbacks the tray menu invokes. Any may be nil.
 type Handlers struct {

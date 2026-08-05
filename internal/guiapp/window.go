@@ -59,6 +59,11 @@ type dashboard struct {
 	connected bool
 	selName   string
 	query     string
+	// visible mirrors the window's shown/hidden state. While hidden, snapshot
+	// updates are recorded but the widget tree is not rebuilt: Fyne only purges
+	// its renderer/canvas caches when a visible window repaints, so a hidden
+	// window rebuilt every second leaks widgets (and their font data) forever.
+	visible bool
 
 	// stable widgets / refresh targets
 	search    *widget.Entry
@@ -79,7 +84,7 @@ func newDashboard(app fyne.App, actions *DashboardActions) *dashboard {
 	d.win = app.NewWindow("hopd")
 	d.win.SetIcon(logoResource)
 	d.win.Resize(fyne.NewSize(780, 600))
-	d.win.SetCloseIntercept(func() { d.win.Hide() }) // hide, don't quit
+	d.win.SetCloseIntercept(d.closeToTray) // hide, don't quit
 
 	d.buildContent()
 	return d
@@ -617,9 +622,13 @@ func (d *dashboard) update(snap []ipc.TunnelStatus) {
 }
 
 // updateState records a snapshot + connection flag and refreshes the view.
+// While the window is hidden it only records: show() re-renders on demand.
 func (d *dashboard) updateState(snap []ipc.TunnelStatus, connected bool) {
 	d.snap = snap
 	d.connected = connected
+	if !d.visible {
+		return
+	}
 	d.refresh()
 }
 
@@ -637,7 +646,18 @@ func (d *dashboard) refresh() {
 	}
 }
 
-func (d *dashboard) show() { d.win.Show() }
+func (d *dashboard) show() {
+	d.visible = true
+	d.refresh() // catch up on snapshots that arrived while hidden
+	d.win.Show()
+}
+
+// closeToTray hides the window (close intercept) and stops per-snapshot
+// widget rebuilds until it is shown again.
+func (d *dashboard) closeToTray() {
+	d.visible = false
+	d.win.Hide()
+}
 
 // ---- small helpers -------------------------------------------------------
 

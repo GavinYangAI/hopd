@@ -14,6 +14,7 @@ func TestDashboard_Constructs(t *testing.T) {
 	defer app.Quit()
 
 	d := newDashboard(app, &DashboardActions{}) // empty actions: construction smoke test
+	d.show()                                    // visible: updates render immediately
 	d.update([]ipc.TunnelStatus{{Name: "a", Group: "g", State: "UP", Local: "5432", Remote: "h:5432"}})
 	if d.win == nil || d.body == nil {
 		t.Fatal("dashboard not constructed")
@@ -94,4 +95,56 @@ func TestDashboard_OpenSettingsAndImportNoPanic(t *testing.T) {
 	// missing ~/.ssh/config (errMissingSSHConfig -> empty form).
 	d.openSettings()
 	d.openImport()
+}
+
+func TestDashboard_UpdateWhileHiddenSkipsRefresh(t *testing.T) {
+	app := test.NewApp()
+	defer app.Quit()
+
+	d := newDashboard(app, &DashboardActions{})
+	// Construction renders the disconnected placeholder once.
+	if d.summary.Text != "daemon 未运行" {
+		t.Fatalf("initial summary = %q, want disconnected placeholder", d.summary.Text)
+	}
+
+	snap := []ipc.TunnelStatus{{Name: "a", Group: "g", State: "UP", Local: "5432", Remote: "h:5432"}}
+	d.updateState(snap, true)
+
+	// The window is hidden: the snapshot must be recorded but the widget tree
+	// must NOT be rebuilt (each rebuild leaks renderers while hidden — the
+	// Fyne cache is only purged when a visible window repaints).
+	if len(d.snap) != 1 || !d.connected {
+		t.Fatal("updateState should record snapshot and connection state")
+	}
+	if d.summary.Text == gui.Summarize(snap) {
+		t.Fatal("hidden window should not refresh widgets on updateState")
+	}
+}
+
+func TestDashboard_ShowRendersPendingSnapshot(t *testing.T) {
+	app := test.NewApp()
+	defer app.Quit()
+
+	d := newDashboard(app, &DashboardActions{})
+	snap := []ipc.TunnelStatus{{Name: "a", Group: "g", State: "UP", Local: "5432", Remote: "h:5432"}}
+	d.updateState(snap, true) // arrives while hidden
+
+	d.show()
+
+	if d.summary.Text != gui.Summarize(snap) {
+		t.Fatalf("show() should refresh from the pending snapshot, summary = %q", d.summary.Text)
+	}
+
+	// While visible, updates refresh immediately.
+	d.updateState(nil, false)
+	if d.summary.Text != "daemon 未运行" {
+		t.Fatalf("visible window should refresh on updateState, summary = %q", d.summary.Text)
+	}
+
+	// Closing the window (the close intercept hides it) stops refreshes again.
+	d.closeToTray()
+	d.updateState(snap, true)
+	if d.summary.Text != "daemon 未运行" {
+		t.Fatal("after closeToTray, updateState should stop refreshing widgets")
+	}
 }
