@@ -1,10 +1,8 @@
 package daemon
 
 import (
-	"fmt"
 	"net"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -12,10 +10,26 @@ import (
 	"github.com/GavinYangAI/hopd/internal/ipc"
 )
 
+func testSocket(t *testing.T) string {
+	t.Helper()
+	f, err := os.CreateTemp("", "hopd-sock-*.sock")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := f.Name()
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Remove(path) })
+	return path
+}
+
 func TestServer_SocketIsOwnerOnly(t *testing.T) {
-	// Short /tmp path (macOS t.TempDir() can exceed the 104-char sun_path limit).
-	sock := fmt.Sprintf("/tmp/hopd-sock-%d.sock", os.Getpid())
-	defer os.Remove(sock)
+	// Short system-temp path (macOS t.TempDir() can exceed sun_path's limit).
+	sock := testSocket(t)
 	m := NewManager(fakeSSH(t, "sleep 30"), testCfg(t))
 	srv := NewServer(sock, m, func() (*config.Config, error) { return testCfg(t), nil })
 	go srv.Serve()
@@ -42,7 +56,7 @@ func dialServer(t *testing.T, sock string) net.Conn {
 }
 
 func TestServer_StatusRoundTrip(t *testing.T) {
-	sock := filepath.Join(t.TempDir(), "h.sock")
+	sock := testSocket(t)
 	m := NewManager(fakeSSH(t, "sleep 30"), testCfg(t))
 	srv := NewServer(sock, m, func() (*config.Config, error) { return testCfg(t), nil })
 	go srv.Serve()
@@ -66,7 +80,7 @@ func TestServer_StatusRoundTrip(t *testing.T) {
 }
 
 func TestServer_UpThenStatus(t *testing.T) {
-	sock := filepath.Join(t.TempDir(), "h.sock")
+	sock := testSocket(t)
 	m := NewManager(fakeSSH(t, "sleep 30"), testCfg(t))
 	srv := NewServer(sock, m, func() (*config.Config, error) { return testCfg(t), nil })
 	go srv.Serve()
@@ -98,7 +112,7 @@ func TestServer_UpThenStatus(t *testing.T) {
 }
 
 func TestServer_UnknownTargetReturnsError(t *testing.T) {
-	sock := filepath.Join(t.TempDir(), "h.sock")
+	sock := testSocket(t)
 	m := NewManager(fakeSSH(t, "sleep 30"), testCfg(t))
 	srv := NewServer(sock, m, func() (*config.Config, error) { return testCfg(t), nil })
 	go srv.Serve()

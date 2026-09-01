@@ -60,7 +60,9 @@ func TestRunner_RetriesOnQuickExit(t *testing.T) {
 	r.SetProbe(func(string) bool { return false })
 	r.Start()
 	defer r.Stop()
-	eventually(t, 2*time.Second, func() bool { return r.Snapshot().Reconnects >= 2 })
+	// Reaching two reconnects starts three child processes; loaded macOS runners
+	// can spend most of the timeout in process startup despite millisecond backoff.
+	eventually(t, 5*time.Second, func() bool { return r.Snapshot().Reconnects >= 2 })
 }
 
 func TestRunner_MarksUpWhenProbeSucceeds(t *testing.T) {
