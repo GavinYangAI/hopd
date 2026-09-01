@@ -43,16 +43,18 @@ jobs:
       - name: Install Fyne packaging tool
         run: go install fyne.io/fyne/v2/cmd/fyne@v2.7.4
 
-      - name: Stamp bundle version from the tag
-        run: |
-          V="${GITHUB_REF_NAME#v}"
-          sed -i '' "s/^Version = .*/Version = \"$V\"/" FyneApp.toml
-
       - name: Package hopd-gui.app
         run: |
           export PATH="$PATH:$(go env GOPATH)/bin"
-          make gui-package
+          RELEASE_BUNDLE_VERSION="${GITHUB_REF_NAME#v}"
+          make gui-package BUNDLE_VERSION="$RELEASE_BUNDLE_VERSION"
           ditto -c -k --sequesterRsrc --keepParent hopd-gui.app "hopd-gui_${GITHUB_REF_NAME}_macos.zip"
+
+      - name: Verify bundle version
+        run: |
+          EXPECTED_BUNDLE_VERSION="${GITHUB_REF_NAME#v}"
+          ACTUAL_BUNDLE_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" hopd-gui.app/Contents/Info.plist)
+          test "$ACTUAL_BUNDLE_VERSION" = "$EXPECTED_BUNDLE_VERSION"
 
       - name: Upload to the release
         env:
